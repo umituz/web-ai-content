@@ -1,0 +1,76 @@
+{
+  "name": "@umituz/web-ai-content",
+  "version": "1.0.0",
+  "description": "AI-powered content generation suite with platform-specific optimization, sentiment analysis, and SEO tools",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "/domain": {
+      "types": "./dist/domain/index.d.ts",
+      "import": "./dist/domain/index.mjs",
+      "require": "./dist/domain/index.js"
+    },
+    "/application": {
+      "types": "./dist/application/index.d.ts",
+      "import": "./dist/application/index.mjs",
+      "require": "./dist/application/index.js"
+    },
+    "/infrastructure": {
+      "types": "./dist/infrastructure/index.d.ts",
+      "import": "./dist/infrastructure/index.mjs",
+      "require": "./dist/infrastructure/index.js"
+    },
+    "/presentation": {
+      "types": "./dist/presentation/index.d.ts",
+      "import": "./dist/presentation/index.mjs",
+      "require": "./dist/presentation/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/domain/index.ts src/application/index.ts src/infrastructure/index.ts src/presentation/index.ts --format cjs,esm --dts --clean --external react",
+    "dev": "tsup src/index.ts src/domain/index.ts src/application/index.ts src/infrastructure/index.ts src/presentation/index.ts --format cjs,esm --dts --watch --external react",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "ai",
+    "content-generation",
+    "seo",
+    "sentiment-analysis",
+    "social-media",
+    "blog",
+    "video-script",
+    "hashtags",
+    "a-b-testing",
+    "platform-optimization",
+    "typescript",
+    "react",
+    "web"
+  ],
+  "author": "umituz",
+  "license": "MIT",
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1"
+  }
+}
