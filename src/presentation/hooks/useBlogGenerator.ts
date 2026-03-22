@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
-import { AIContentService } from '../application/services/AIContentService';
-import type { BlogGenerationRequest, GeneratedBlog } from '../domain/entities/ContentGeneration';
+import { useState, useCallback, useMemo } from 'react';
+import { AIContentService } from '../../application/services/AIContentService';
+import type { BlogGenerationRequest, GeneratedBlog } from '../../domain/entities/ContentGeneration';
 
 interface UseBlogGeneratorOptions {
   apiKey: string;
@@ -23,7 +23,7 @@ export function useBlogGenerator(options: UseBlogGeneratorOptions): UseBlogGener
   const [generatedBlog, setGeneratedBlog] = useState<GeneratedBlog | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const service = new AIContentService(options.apiKey, options.model);
+  const service = useMemo(() => new AIContentService(options.apiKey, options.model), [options.apiKey, options.model]);
 
   const generateBlog = useCallback(async (request: BlogGenerationRequest) => {
     setIsGenerating(true);

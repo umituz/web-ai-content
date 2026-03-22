@@ -17,7 +17,6 @@ import {
   ContentAnalysisRequest,
   ContentAnalysisResult,
   SentimentAnalysisResult,
-  Emotion,
 } from '../../domain/entities/SentimentAnalysis';
 import {
   SEOOptimizationRequest,
@@ -29,8 +28,8 @@ import {
   ABTestRequest,
   ABTestPrediction,
   ABTestComparison,
-} from '../../domain/ABTesting';
-import { SocialPlatform, ContentTone, Emotion as VoiceEmotion, PLATFORM_SPECS } from '../../domain/types';
+} from '../../domain/entities/ABTesting';
+import { SocialPlatform, ContentTone, Emotion, ContentType, PLATFORM_SPECS } from '../../domain/types';
 
 /**
  * AI Content Service Implementation
@@ -110,7 +109,7 @@ RESPONSE FORMAT (STRICT JSON ONLY):
     try {
       const parsed = JSON.parse(response);
       return {
-        id: Math.random().toString(36).substr(2, 9),
+        id: Math.random().toString(36).substring(2, 11),
         ...parsed,
         blogType: request.blogType,
         tone: request.tone,
@@ -200,6 +199,9 @@ Generate in JSON format:
 
     try {
       const parsed = JSON.parse(response);
+      if (!parsed.script) {
+        throw new Error('AI response missing script field');
+      }
       return {
         ...parsed,
         duration: request.duration,
@@ -230,6 +232,15 @@ Generate in JSON format:
    * Generate Content Calendar
    */
   async generateContentCalendar(niche: string, days: number): Promise<ContentCalendarEntry[]> {
+    interface CalendarItem {
+      day: number;
+      topic: string;
+      contentType: ContentType;
+      platform: SocialPlatform;
+      description: string;
+      estimatedEngagement: number;
+      priority: 'high' | 'medium' | 'low';
+    }
     const prompt = `
 Generate a ${days}-day content calendar for: ${niche}
 
@@ -267,8 +278,8 @@ Requirements:
     });
 
     try {
-      const data = JSON.parse(response);
-      return data.map((item: any) => ({
+      const data = JSON.parse(response) as CalendarItem[];
+      return data.map((item) => ({
         date: new Date(Date.now() + (item.day - 1) * 24 * 60 * 60 * 1000),
         topic: item.topic,
         contentType: item.contentType,
@@ -708,7 +719,7 @@ Return only the JSON:
    */
   async generateVoiceScript(
     topic: string,
-    emotion: VoiceEmotion,
+    emotion: Emotion,
     duration: number
   ): Promise<GeneratedVideoScript> {
     const prompt = `
@@ -741,6 +752,9 @@ Generate in JSON format:
 
     try {
       const parsed = JSON.parse(response);
+      if (!parsed.script) {
+        throw new Error('AI response missing script field');
+      }
       return {
         ...parsed,
         duration,
