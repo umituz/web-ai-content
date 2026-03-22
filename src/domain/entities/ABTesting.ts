@@ -5,7 +5,7 @@ import { ContentType, ContentTone } from '../types';
  */
 export interface ABTestVariant {
   id: string;
-  name: string;
+  name?: string; // Optional, not always required
   content: string;
   contentType: ContentType;
   tone: ContentTone;

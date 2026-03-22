@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { AIContentService } from '../application/services/AIContentService';
+import { useState, useCallback, useMemo } from 'react';
+import { AIContentService } from '../../application/services/AIContentService';
 import type {
   BlogGenerationRequest,
   GeneratedBlog,
@@ -7,20 +7,24 @@ import type {
   GeneratedSocialContent,
   VideoScriptRequest,
   GeneratedVideoScript,
-} from '../domain/entities/ContentGeneration';
+  ContentCalendarEntry,
+} from '../../domain/entities/ContentGeneration';
 import type {
   ContentAnalysisRequest,
   ContentAnalysisResult,
-} from '../domain/entities/SentimentAnalysis';
+  SentimentAnalysisResult,
+} from '../../domain/entities/SentimentAnalysis';
 import type {
   SEOOptimizationRequest,
   SEOOptimizationResult,
-} from '../domain/entities/SEO';
+  SEOScoreBreakdown,
+} from '../../domain/entities/SEO';
 import type {
   ABTestRequest,
   ABTestPrediction,
-} from '../domain/entities/ABTesting';
-import type { ContentTone, Emotion } from '../domain/types';
+  ABTestComparison,
+} from '../../domain/entities/ABTesting';
+import type { ContentTone, Emotion } from '../../domain/types';
 
 interface UseAIContentOptions {
   apiKey: string;
@@ -43,19 +47,19 @@ interface UseAIContentReturn {
   generateVideoScript: (request: VideoScriptRequest) => Promise<GeneratedVideoScript | null>;
 
   // Content Calendar
-  generateContentCalendar: (niche: string, days: number) => Promise<any[]>;
+  generateContentCalendar: (niche: string, days: number) => Promise<ContentCalendarEntry[]>;
 
   // Analysis
-  analyzeSentiment: (content: string) => Promise<any>;
+  analyzeSentiment: (content: string) => Promise<SentimentAnalysisResult>;
   analyzeContent: (request: ContentAnalysisRequest) => Promise<ContentAnalysisResult | null>;
 
   // SEO
   optimizeSEO: (request: SEOOptimizationRequest) => Promise<SEOOptimizationResult | null>;
-  calculateSEOScore: (content: string, keywords: string[]) => Promise<any>;
+  calculateSEOScore: (content: string, keywords: string[]) => Promise<SEOScoreBreakdown>;
 
   // A/B Testing
   predictABTest: (request: ABTestRequest) => Promise<ABTestPrediction[]>;
-  compareVariants: (variantA: string, variantB: string) => Promise<any>;
+  compareVariants: (variantA: string, variantB: string) => Promise<ABTestComparison>;
 
   // Hashtags
   generateHashtags: (content: string, count: number) => Promise<string[]>;
@@ -71,7 +75,7 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const service = new AIContentService(options.apiKey, options.model);
+  const service = useMemo(() => new AIContentService(options.apiKey, options.model), [options.apiKey, options.model]);
 
   const generateBlogPost = useCallback(async (request: BlogGenerationRequest) => {
     setIsLoading(true);
@@ -143,7 +147,7 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
     }
   }, [service]);
 
-  const analyzeSentiment = useCallback(async (content: string) => {
+  const analyzeSentiment = useCallback(async (content: string): Promise<SentimentAnalysisResult> => {
     setIsLoading(true);
     setError(null);
     try {
@@ -151,7 +155,7 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
       return result;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to analyze sentiment');
-      return null;
+      return { sentiment: 'neutral', confidence: 0.5, emotions: [] };
     } finally {
       setIsLoading(false);
     }
@@ -193,7 +197,15 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
       return result;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to calculate SEO score');
-      return null;
+      return {
+        keywordDensity: 50,
+        readabilityScore: 50,
+        titleOptimization: 50,
+        metaDescription: 50,
+        headingStructure: 50,
+        internalLinking: 50,
+        overall: 50,
+      };
     } finally {
       setIsLoading(false);
     }
@@ -221,7 +233,13 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
       return result;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to compare variants');
-      return null;
+      return {
+        winner: 'A',
+        confidence: 0.5,
+        improvement: '0%',
+        reasoning: 'Failed to compare variants',
+        recommendations: [],
+      };
     } finally {
       setIsLoading(false);
     }

@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react';
-import { AIContentService } from '../application/services/AIContentService';
-import type { SocialContentRequest, GeneratedSocialContent } from '../domain/entities/ContentGeneration';
-import type { ContentTone, SocialPlatform } from '../domain/types';
+import { useState, useCallback, useMemo } from 'react';
+import { AIContentService } from '../../application/services/AIContentService';
+import type { SocialContentRequest, GeneratedSocialContent } from '../../domain/entities/ContentGeneration';
+import type { ContentTone, SocialPlatform } from '../../domain/types';
 
 interface UseSocialContentGeneratorOptions {
   apiKey: string;
@@ -27,7 +27,7 @@ export function useSocialContentGenerator(
   const [generatedContents, setGeneratedContents] = useState<GeneratedSocialContent[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const service = new AIContentService(options.apiKey, options.model);
+  const service = useMemo(() => new AIContentService(options.apiKey, options.model), [options.apiKey, options.model]);
 
   const generateForPlatform = useCallback(async (request: SocialContentRequest) => {
     setIsGenerating(true);

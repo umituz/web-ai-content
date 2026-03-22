@@ -15,22 +15,17 @@
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
     },
-    "/domain": {
+    "./domain": {
       "types": "./dist/domain/index.d.ts",
       "import": "./dist/domain/index.mjs",
       "require": "./dist/domain/index.js"
     },
-    "/application": {
+    "./application": {
       "types": "./dist/application/index.d.ts",
       "import": "./dist/application/index.mjs",
       "require": "./dist/application/index.js"
     },
-    "/infrastructure": {
-      "types": "./dist/infrastructure/index.d.ts",
-      "import": "./dist/infrastructure/index.mjs",
-      "require": "./dist/infrastructure/index.js"
-    },
-    "/presentation": {
+    "./presentation": {
       "types": "./dist/presentation/index.d.ts",
       "import": "./dist/presentation/index.mjs",
       "require": "./dist/presentation/index.js"
@@ -41,8 +36,8 @@
     "src"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/domain/index.ts src/application/index.ts src/infrastructure/index.ts src/presentation/index.ts --format cjs,esm --dts --clean --external react",
-    "dev": "tsup src/index.ts src/domain/index.ts src/application/index.ts src/infrastructure/index.ts src/presentation/index.ts --format cjs,esm --dts --watch --external react",
+    "build": "tsup src/index.ts src/domain/index.ts src/application/index.ts src/presentation/index.ts --format cjs,esm --dts --clean --external react",
+    "dev": "tsup src/index.ts src/domain/index.ts src/application/index.ts src/presentation/index.ts --format cjs,esm --dts --watch --external react",
     "lint": "tsc --noEmit"
   },
   "keywords": [
