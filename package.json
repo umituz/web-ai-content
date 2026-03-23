@@ -1,6 +1,6 @@
 {
   "name": "@umituz/web-ai-content",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "AI-powered content generation suite with platform-specific optimization, sentiment analysis, and SEO tools",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
