@@ -24,6 +24,7 @@ export interface PlatformSpecs {
   hashtagSupport: boolean;
   imageSupport: boolean;
   videoSupport: boolean;
+  maxHashtags: number;
 }
 
 export const PLATFORM_SPECS: Record<SocialPlatform, PlatformSpecs> = {
@@ -34,6 +35,7 @@ export const PLATFORM_SPECS: Record<SocialPlatform, PlatformSpecs> = {
     hashtagSupport: true,
     imageSupport: true,
     videoSupport: true,
+    maxHashtags: 5,
   },
   linkedin: {
     maxLength: 3000,
@@ -42,6 +44,7 @@ export const PLATFORM_SPECS: Record<SocialPlatform, PlatformSpecs> = {
     hashtagSupport: true,
     imageSupport: true,
     videoSupport: true,
+    maxHashtags: 5,
   },
   instagram: {
     maxLength: 2200,
@@ -50,6 +53,7 @@ export const PLATFORM_SPECS: Record<SocialPlatform, PlatformSpecs> = {
     hashtagSupport: true,
     imageSupport: true,
     videoSupport: true,
+    maxHashtags: 30,
   },
   threads: {
     maxLength: 500,
@@ -58,6 +62,7 @@ export const PLATFORM_SPECS: Record<SocialPlatform, PlatformSpecs> = {
     hashtagSupport: true,
     imageSupport: true,
     videoSupport: true,
+    maxHashtags: 5,
   },
   tiktok: {
     maxLength: 150,
@@ -66,6 +71,7 @@ export const PLATFORM_SPECS: Record<SocialPlatform, PlatformSpecs> = {
     hashtagSupport: true,
     imageSupport: false,
     videoSupport: true,
+    maxHashtags: 5,
   },
   facebook: {
     maxLength: 63206,
@@ -74,5 +80,6 @@ export const PLATFORM_SPECS: Record<SocialPlatform, PlatformSpecs> = {
     hashtagSupport: true,
     imageSupport: true,
     videoSupport: true,
+    maxHashtags: 5,
   },
 };
