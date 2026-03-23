@@ -32,6 +32,37 @@ import {
 import { SocialPlatform, ContentTone, Emotion, ContentType, PLATFORM_SPECS } from '../../domain/types';
 
 /**
+ * Constants for content generation calculations
+ */
+const WORDS_PER_SECOND = 2.5;
+const TOKENS_PER_SECOND = 10;
+const MAX_CONTENT_PREVIEW_LENGTH = 500;
+const MAX_VARIANT_CONTENT_LENGTH = 200;
+const MAX_BLOG_CONTENT_PREVIEW_LENGTH = 1000;
+
+/**
+ * Escapes special regex characters in a string to prevent ReDoS attacks
+ */
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Parses JSON from AI response with fallback to default value
+ */
+function parseJSONResponse<T>(response: string, fallback: T): T {
+  try {
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]) as T;
+    }
+  } catch (error) {
+    // Return fallback on parse error
+  }
+  return fallback;
+}
+
+/**
  * AI Content Service Implementation
  * Uses Anthropic Claude API for content generation
  */
@@ -114,7 +145,7 @@ RESPONSE FORMAT (STRICT JSON ONLY):
         blogType: request.blogType,
         tone: request.tone,
         wordCount: request.wordCount,
-        createdAt: new Date().toISOString().split('T')[0],
+        createdAt: new Date().toISOString(),
       };
     } catch (error) {
       throw new Error(`Failed to parse AI response: ${error}`);
@@ -181,7 +212,7 @@ Target Audience: ${request.targetAudience}
 Include Visual Cues: ${request.includeVisuals ? 'Yes' : 'No'}
 Include CTA: ${request.includeCallToAction ? 'Yes' : 'No'}
 
-Approximate word count: ${Math.floor(request.duration * 2.5)} words
+Approximate word count: ${Math.floor(request.duration * WORDS_PER_SECOND)} words
 
 Generate in JSON format:
 {
@@ -193,7 +224,7 @@ Generate in JSON format:
 `;
 
     const response = await this.generateText(prompt, {
-      maxTokens: request.duration * 10,
+      maxTokens: request.duration * TOKENS_PER_SECOND,
       temperature: 0.8,
     });
 
@@ -319,20 +350,11 @@ Return only the JSON:
       temperature: 0.3,
     });
 
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-    } catch (error) {
-      // Fallback
-    }
-
-    return {
+    return parseJSONResponse(response, {
       sentiment: 'neutral',
       confidence: 0.5,
       emotions: [],
-    };
+    });
   }
 
   /**
@@ -363,30 +385,21 @@ Return only the JSON:
       temperature: 0.5,
     });
 
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return {
-          sentiment: sentimentResult,
-          keywords: parsed.keywords || [],
-          entities: parsed.entities || [],
-          suggestedImprovements: parsed.suggestedImprovements || [],
-          readabilityScore: parsed.readabilityScore || 50,
-          estimatedEngagement: parsed.estimatedEngagement || 50,
-        };
-      }
-    } catch (error) {
-      // Fallback
-    }
+    const parsed = parseJSONResponse(response, {
+      keywords: [] as string[],
+      entities: [] as string[],
+      suggestedImprovements: [] as string[],
+      readabilityScore: 50,
+      estimatedEngagement: 50,
+    });
 
     return {
       sentiment: sentimentResult,
-      keywords: [],
-      entities: [],
-      suggestedImprovements: [],
-      readabilityScore: 50,
-      estimatedEngagement: 50,
+      keywords: parsed.keywords,
+      entities: parsed.entities,
+      suggestedImprovements: parsed.suggestedImprovements,
+      readabilityScore: parsed.readabilityScore,
+      estimatedEngagement: parsed.estimatedEngagement,
     };
   }
 
@@ -427,23 +440,14 @@ Return only the JSON:
       temperature: 0.7,
     });
 
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-    } catch (error) {
-      // Fallback
-    }
-
-    return {
+    return parseJSONResponse(response, {
       optimized: request.content,
       score: 50,
       suggestions: [],
       addedKeywords: [],
       removedFillerWords: 0,
       readabilityImprovements: [],
-    };
+    });
   }
 
   /**
@@ -453,7 +457,7 @@ Return only the JSON:
     const prompt = `
 Calculate SEO score for this content:
 
-Content: "${content.substring(0, 500)}..."
+Content: "${content.substring(0, MAX_CONTENT_PREVIEW_LENGTH)}..."
 Keywords: ${keywords.join(', ')}
 
 Provide breakdown in JSON:
@@ -475,16 +479,7 @@ Return only the JSON:
       temperature: 0.3,
     });
 
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[0]);
-      }
-    } catch (error) {
-      // Fallback
-    }
-
-    return {
+    return parseJSONResponse(response, {
       keywordDensity: 50,
       readabilityScore: 50,
       titleOptimization: 50,
@@ -492,7 +487,7 @@ Return only the JSON:
       headingStructure: 50,
       internalLinking: 50,
       overall: 50,
-    };
+    });
   }
 
   /**
@@ -500,12 +495,13 @@ Return only the JSON:
    */
   async analyzeKeywords(content: string, keywords: string[]): Promise<KeywordAnalysis[]> {
     const results: KeywordAnalysis[] = [];
+    const trimmedContent = content.trim();
+    const words = trimmedContent ? trimmedContent.split(/\s+/).length : 1;
 
     for (const keyword of keywords) {
-      const regex = new RegExp(keyword, 'gi');
-      const matches = content.match(regex) || [];
+      const regex = new RegExp(escapeRegExp(keyword), 'gi');
+      const matches = trimmedContent.match(regex) || [];
       const count = matches.length;
-      const words = content.split(/\s+/).length;
       const density = (count / words) * 100;
 
       results.push({
@@ -530,7 +526,7 @@ Return only the JSON:
       const prompt = `
 Predict performance for this content variant:
 
-Content: "${variant.content.substring(0, 200)}"
+Content: "${variant.content.substring(0, MAX_VARIANT_CONTENT_LENGTH)}"
 Content Type: ${variant.contentType}
 Tone: ${variant.tone}
 Target Audience: ${request.targetAudience}
@@ -557,17 +553,21 @@ Return only the JSON:
         temperature: 0.5,
       });
 
-      try {
-        const jsonMatch = response.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          predictions.push({
-            variantId: variant.id,
-            ...JSON.parse(jsonMatch[0]),
-          });
-        }
-      } catch (error) {
-        // Fallback
-      }
+      const parsed = parseJSONResponse(response, {
+        predictedEngagement: 0,
+        predictedCTR: 0,
+        predictedConversions: 0,
+        confidence: 0,
+        reasoning: '',
+        strengths: [],
+        weaknesses: [],
+        suggestions: [],
+      });
+
+      predictions.push({
+        variantId: variant.id,
+        ...parsed,
+      });
     }
 
     return predictions;
@@ -590,7 +590,10 @@ Return only the JSON:
     const scoreA = predictions[0]?.predictedEngagement || 50;
     const scoreB = predictions[1]?.predictedEngagement || 50;
     const winner = scoreA > scoreB ? 'A' : 'B';
-    const improvement = Math.abs((Math.max(scoreA, scoreB) / Math.min(scoreA, scoreB) - 1) * 100).toFixed(0);
+    const minScore = Math.min(scoreA, scoreB);
+    const improvement = minScore > 0
+      ? Math.abs((Math.max(scoreA, scoreB) / minScore - 1) * 100).toFixed(0)
+      : '100';
 
     return {
       winner,
@@ -633,8 +636,7 @@ Return only the hashtags:
    * Optimize Hashtags
    */
   async optimizeHashtags(hashtags: string[], platform: SocialPlatform): Promise<string[]> {
-    const spec = PLATFORM_SPECS[platform];
-    const maxHashtags = platform === 'instagram' ? 30 : 5;
+    const maxHashtags = PLATFORM_SPECS[platform].maxHashtags;
 
     if (hashtags.length <= maxHashtags) {
       return hashtags;
@@ -682,7 +684,7 @@ Generate the prompt:
     const prompt = `
 Analyze this blog content and generate 3-5 detailed image prompts for illustrative images:
 
-Blog Content: "${blogContent.substring(0, 1000)}..."
+Blog Content: "${blogContent.substring(0, MAX_BLOG_CONTENT_PREVIEW_LENGTH)}..."
 
 For each image prompt, provide:
 - Subject description
@@ -702,13 +704,13 @@ Return only the JSON:
       temperature: 0.8,
     });
 
-    try {
-      const jsonMatch = response.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
+    const jsonMatch = response.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      try {
         return JSON.parse(jsonMatch[0]);
+      } catch (error) {
+        // Return empty array on parse error
       }
-    } catch (error) {
-      // Fallback
     }
 
     return [];
@@ -735,7 +737,7 @@ The script should:
 - Have appropriate pacing for the emotion
 - Include emotional cues in brackets where needed
 
-Approximate word count: ${Math.floor(duration * 2.5)} words
+Approximate word count: ${Math.floor(duration * WORDS_PER_SECOND)} words
 
 Generate in JSON format:
 {
@@ -746,7 +748,7 @@ Generate in JSON format:
 `;
 
     const response = await this.generateText(prompt, {
-      maxTokens: duration * 10,
+      maxTokens: duration * TOKENS_PER_SECOND,
       temperature: 0.8,
     });
 

@@ -44,6 +44,3 @@ export * from './application';
 
 // Presentation Layer
 export * from './presentation';
-
-// Service
-export { AIContentService } from './application/services/AIContentService';
