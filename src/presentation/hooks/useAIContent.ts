@@ -50,22 +50,22 @@ interface UseAIContentReturn {
   generateContentCalendar: (niche: string, days: number) => Promise<ContentCalendarEntry[]>;
 
   // Analysis
-  analyzeSentiment: (content: string) => Promise<SentimentAnalysisResult>;
+  analyzeSentiment: (content: string) => Promise<SentimentAnalysisResult | null>;
   analyzeContent: (request: ContentAnalysisRequest) => Promise<ContentAnalysisResult | null>;
 
   // SEO
   optimizeSEO: (request: SEOOptimizationRequest) => Promise<SEOOptimizationResult | null>;
-  calculateSEOScore: (content: string, keywords: string[]) => Promise<SEOScoreBreakdown>;
+  calculateSEOScore: (content: string, keywords: string[]) => Promise<SEOScoreBreakdown | null>;
 
   // A/B Testing
   predictABTest: (request: ABTestRequest) => Promise<ABTestPrediction[]>;
-  compareVariants: (variantA: string, variantB: string) => Promise<ABTestComparison>;
+  compareVariants: (variantA: string, variantB: string) => Promise<ABTestComparison | null>;
 
   // Hashtags
   generateHashtags: (content: string, count: number) => Promise<string[]>;
 
   // Image Prompts
-  generateImagePrompt: (description: string, style: string) => Promise<string>;
+  generateImagePrompt: (description: string, style: string) => Promise<string | null>;
 
   // Voice Content
   generateVoiceScript: (topic: string, emotion: Emotion, duration: number) => Promise<GeneratedVideoScript | null>;
@@ -147,7 +147,7 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
     }
   }, [service]);
 
-  const analyzeSentiment = useCallback(async (content: string): Promise<SentimentAnalysisResult> => {
+  const analyzeSentiment = useCallback(async (content: string): Promise<SentimentAnalysisResult | null> => {
     setIsLoading(true);
     setError(null);
     try {
@@ -155,7 +155,7 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
       return result;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to analyze sentiment');
-      return { sentiment: 'neutral', confidence: 0.5, emotions: [] };
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -189,7 +189,7 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
     }
   }, [service]);
 
-  const calculateSEOScore = useCallback(async (content: string, keywords: string[]) => {
+  const calculateSEOScore = useCallback(async (content: string, keywords: string[]): Promise<SEOScoreBreakdown | null> => {
     setIsLoading(true);
     setError(null);
     try {
@@ -197,15 +197,7 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
       return result;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to calculate SEO score');
-      return {
-        keywordDensity: 50,
-        readabilityScore: 50,
-        titleOptimization: 50,
-        metaDescription: 50,
-        headingStructure: 50,
-        internalLinking: 50,
-        overall: 50,
-      };
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -225,7 +217,7 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
     }
   }, [service]);
 
-  const compareVariants = useCallback(async (variantA: string, variantB: string) => {
+  const compareVariants = useCallback(async (variantA: string, variantB: string): Promise<ABTestComparison | null> => {
     setIsLoading(true);
     setError(null);
     try {
@@ -233,13 +225,7 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
       return result;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to compare variants');
-      return {
-        winner: 'A',
-        confidence: 0.5,
-        improvement: '0%',
-        reasoning: 'Failed to compare variants',
-        recommendations: [],
-      };
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -259,7 +245,7 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
     }
   }, [service]);
 
-  const generateImagePrompt = useCallback(async (description: string, style: string) => {
+  const generateImagePrompt = useCallback(async (description: string, style: string): Promise<string | null> => {
     setIsLoading(true);
     setError(null);
     try {
@@ -267,7 +253,7 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
       return result;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate image prompt');
-      return '';
+      return null;
     } finally {
       setIsLoading(false);
     }
