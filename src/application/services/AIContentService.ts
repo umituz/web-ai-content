@@ -41,6 +41,18 @@ const MAX_VARIANT_CONTENT_LENGTH = 200;
 const MAX_BLOG_CONTENT_PREVIEW_LENGTH = 1000;
 
 /**
+ * Validation limits for user inputs
+ */
+const MAX_TOPIC_LENGTH = 500;
+const MAX_CONTENT_LENGTH = 10000;
+const MAX_KEYWORDS_COUNT = 20;
+const MAX_KEYWORD_LENGTH = 50;
+const MIN_DURATION_SECONDS = 10;
+const MAX_DURATION_SECONDS = 600;
+const MIN_DAYS = 1;
+const MAX_DAYS = 90;
+
+/**
  * Escapes special regex characters in a string to prevent ReDoS attacks
  */
 function escapeRegExp(text: string): string {
@@ -60,6 +72,101 @@ function parseJSONResponse<T>(response: string, fallback: T): T {
     // Return fallback on parse error
   }
   return fallback;
+}
+
+/**
+ * Validates and trims topic input
+ */
+function validateTopic(topic: string): string {
+  if (!topic || topic.trim().length === 0) {
+    throw new Error('Topic cannot be empty');
+  }
+  const trimmed = topic.trim();
+  if (trimmed.length > MAX_TOPIC_LENGTH) {
+    throw new Error(`Topic exceeds maximum length of ${MAX_TOPIC_LENGTH} characters`);
+  }
+  return trimmed;
+}
+
+/**
+ * Validates and trims content input
+ */
+function validateContent(content: string): string {
+  if (!content || content.trim().length === 0) {
+    throw new Error('Content cannot be empty');
+  }
+  const trimmed = content.trim();
+  if (trimmed.length > MAX_CONTENT_LENGTH) {
+    throw new Error(`Content exceeds maximum length of ${MAX_CONTENT_LENGTH} characters`);
+  }
+  return trimmed;
+}
+
+/**
+ * Validates keywords array
+ */
+function validateKeywords(keywords: string[]): string[] {
+  if (!Array.isArray(keywords)) {
+    throw new Error('Keywords must be an array');
+  }
+  if (keywords.length > MAX_KEYWORDS_COUNT) {
+    throw new Error(`Cannot process more than ${MAX_KEYWORDS_COUNT} keywords`);
+  }
+  return keywords
+    .filter(k => k && k.trim().length > 0)
+    .map(k => {
+      const trimmed = k.trim();
+      if (trimmed.length > MAX_KEYWORD_LENGTH) {
+        throw new Error(`Keyword "${trimmed.substring(0, 20)}..." exceeds maximum length of ${MAX_KEYWORD_LENGTH} characters`);
+      }
+      return trimmed;
+    });
+}
+
+/**
+ * Validates duration in seconds
+ */
+function validateDuration(duration: number): number {
+  if (!Number.isFinite(duration) || duration < MIN_DURATION_SECONDS || duration > MAX_DURATION_SECONDS) {
+    throw new Error(`Duration must be between ${MIN_DURATION_SECONDS} and ${MAX_DURATION_SECONDS} seconds`);
+  }
+  return duration;
+}
+
+/**
+ * Validates days count
+ */
+function validateDays(days: number): number {
+  if (!Number.isFinite(days) || days < MIN_DAYS || days > MAX_DAYS) {
+    throw new Error(`Days must be between ${MIN_DAYS} and ${MAX_DAYS}`);
+  }
+  return days;
+}
+
+/**
+ * Validates hashtag count
+ */
+function validateHashtagCount(count: number): number {
+  if (!Number.isFinite(count) || count < 1 || count > 50) {
+    throw new Error('Hashtag count must be between 1 and 50');
+  }
+  return Math.floor(count);
+}
+
+/**
+ * Validates and clamps a score to 0-100 range
+ */
+function clampScore(score: number): number {
+  if (!Number.isFinite(score)) return 50; // Default on invalid
+  return Math.max(0, Math.min(100, score));
+}
+
+/**
+ * Validates and clamps a confidence value to 0-1 range
+ */
+function clampConfidence(confidence: number): number {
+  if (!Number.isFinite(confidence)) return 0.5; // Default on invalid
+  return Math.max(0, Math.min(1, confidence));
 }
 
 /**
@@ -98,12 +205,16 @@ export class AIContentService implements IAIContentService {
    * Generate Blog Post
    */
   async generateBlogPost(request: BlogGenerationRequest): Promise<GeneratedBlog> {
+    // Validate inputs
+    const validatedTopic = validateTopic(request.topic);
+    const validatedKeywords = validateKeywords(request.targetKeywords);
+
     const prompt = `
 As an expert SEO Content Strategist and Copywriter, generate a high-quality, comprehensive blog post.
 
-TOPIC: ${request.topic}
+TOPIC: ${validatedTopic}
 TYPE: ${request.blogType}
-KEYWORDS: ${request.targetKeywords.join(', ')}
+KEYWORDS: ${validatedKeywords.join(', ')}
 TONE: ${request.tone}
 TARGET AUDIENCE: ${request.targetAudience}
 WORD COUNT: ${request.wordCount}
@@ -156,11 +267,14 @@ RESPONSE FORMAT (STRICT JSON ONLY):
    * Generate Social Media Content
    */
   async generateSocialContent(request: SocialContentRequest): Promise<GeneratedSocialContent> {
+    // Validate inputs
+    const validatedTopic = validateTopic(request.topic);
+
     const spec = PLATFORM_SPECS[request.platform];
     const length = request.maxLength || spec.maxLength;
 
     const prompt = `
-Write a ${request.tone} social media post about: ${request.topic}
+Write a ${request.tone} social media post about: ${validatedTopic}
 
 Platform: ${request.platform}
 Style: ${spec.style}
@@ -204,15 +318,19 @@ Generate the post in JSON format:
    * Generate Video Script
    */
   async generateVideoScript(request: VideoScriptRequest): Promise<GeneratedVideoScript> {
-    const prompt = `
-Create a ${request.tone} video script about: ${request.topic}
+    // Validate inputs
+    const validatedTopic = validateTopic(request.topic);
+    const validatedDuration = validateDuration(request.duration);
 
-Duration: ${request.duration} seconds
+    const prompt = `
+Create a ${request.tone} video script about: ${validatedTopic}
+
+Duration: ${validatedDuration} seconds
 Target Audience: ${request.targetAudience}
 Include Visual Cues: ${request.includeVisuals ? 'Yes' : 'No'}
 Include CTA: ${request.includeCallToAction ? 'Yes' : 'No'}
 
-Approximate word count: ${Math.floor(request.duration * WORDS_PER_SECOND)} words
+Approximate word count: ${Math.floor(validatedDuration * WORDS_PER_SECOND)} words
 
 Generate in JSON format:
 {
@@ -224,7 +342,7 @@ Generate in JSON format:
 `;
 
     const response = await this.generateText(prompt, {
-      maxTokens: request.duration * TOKENS_PER_SECOND,
+      maxTokens: validatedDuration * TOKENS_PER_SECOND,
       temperature: 0.8,
     });
 
@@ -235,7 +353,7 @@ Generate in JSON format:
       }
       return {
         ...parsed,
-        duration: request.duration,
+        duration: validatedDuration,
         wordCount: parsed.script.split(' ').length,
       };
     } catch (error) {
@@ -263,6 +381,10 @@ Generate in JSON format:
    * Generate Content Calendar
    */
   async generateContentCalendar(niche: string, days: number): Promise<ContentCalendarEntry[]> {
+    // Validate inputs
+    const validatedNiche = validateTopic(niche);
+    const validatedDays = validateDays(days);
+
     interface CalendarItem {
       day: number;
       topic: string;
@@ -273,7 +395,7 @@ Generate in JSON format:
       priority: 'high' | 'medium' | 'low';
     }
     const prompt = `
-Generate a ${days}-day content calendar for: ${niche}
+Generate a ${validatedDays}-day content calendar for: ${validatedNiche}
 
 For each day, provide:
 - Topic
@@ -304,7 +426,7 @@ Requirements:
 `;
 
     const response = await this.generateText(prompt, {
-      maxTokens: days * 100,
+      maxTokens: validatedDays * 100,
       temperature: 0.8,
     });
 
@@ -328,10 +450,13 @@ Requirements:
    * Analyze Sentiment
    */
   async analyzeSentiment(content: string): Promise<SentimentAnalysisResult> {
+    // Validate inputs
+    const validatedContent = validateContent(content);
+
     const prompt = `
 Analyze the sentiment of this social media post:
 
-"${content}"
+"${validatedContent}"
 
 Provide analysis in JSON format:
 {
@@ -350,23 +475,31 @@ Return only the JSON:
       temperature: 0.3,
     });
 
-    return parseJSONResponse(response, {
+    const result = parseJSONResponse<SentimentAnalysisResult>(response, {
       sentiment: 'neutral',
       confidence: 0.5,
       emotions: [],
     });
+
+    // Validate confidence is in 0-1 range
+    result.confidence = clampConfidence(result.confidence);
+
+    return result;
   }
 
   /**
    * Analyze Content
    */
   async analyzeContent(request: ContentAnalysisRequest): Promise<ContentAnalysisResult> {
-    const sentimentResult = await this.analyzeSentiment(request.content);
+    // Validate inputs
+    const validatedContent = validateContent(request.content);
+
+    const sentimentResult = await this.analyzeSentiment(validatedContent);
 
     const prompt = `
 Analyze this content:
 
-"${request.content}"
+"${validatedContent}"
 
 Provide analysis in JSON format:
 {
@@ -393,6 +526,10 @@ Return only the JSON:
       estimatedEngagement: 50,
     });
 
+    // Validate score ranges
+    parsed.readabilityScore = clampScore(parsed.readabilityScore);
+    parsed.estimatedEngagement = clampScore(parsed.estimatedEngagement);
+
     return {
       sentiment: sentimentResult,
       keywords: parsed.keywords,
@@ -407,11 +544,15 @@ Return only the JSON:
    * Optimize SEO
    */
   async optimizeSEO(request: SEOOptimizationRequest): Promise<SEOOptimizationResult> {
+    // Validate inputs
+    const validatedContent = validateContent(request.content);
+    const validatedKeywords = validateKeywords(request.keywords);
+
     const prompt = `
 Optimize this content for SEO:
 
-Content: "${request.content}"
-Keywords: ${request.keywords.join(', ')}
+Content: "${validatedContent}"
+Keywords: ${validatedKeywords.join(', ')}
 
 Tasks:
 1. Incorporate keywords naturally
@@ -440,25 +581,34 @@ Return only the JSON:
       temperature: 0.7,
     });
 
-    return parseJSONResponse(response, {
-      optimized: request.content,
+    const result = parseJSONResponse(response, {
+      optimized: validatedContent,
       score: 50,
       suggestions: [],
       addedKeywords: [],
       removedFillerWords: 0,
       readabilityImprovements: [],
     });
+
+    // Validate score is in 0-100 range
+    result.score = clampScore(result.score);
+
+    return result;
   }
 
   /**
    * Calculate SEO Score
    */
   async calculateSEOScore(content: string, keywords: string[]): Promise<SEOScoreBreakdown> {
+    // Validate inputs
+    const validatedContent = validateContent(content);
+    const validatedKeywords = validateKeywords(keywords);
+
     const prompt = `
 Calculate SEO score for this content:
 
-Content: "${content.substring(0, MAX_CONTENT_PREVIEW_LENGTH)}..."
-Keywords: ${keywords.join(', ')}
+Content: "${validatedContent.substring(0, MAX_CONTENT_PREVIEW_LENGTH)}..."
+Keywords: ${validatedKeywords.join(', ')}
 
 Provide breakdown in JSON:
 {
@@ -479,7 +629,7 @@ Return only the JSON:
       temperature: 0.3,
     });
 
-    return parseJSONResponse(response, {
+    const result = parseJSONResponse(response, {
       keywordDensity: 50,
       readabilityScore: 50,
       titleOptimization: 50,
@@ -488,19 +638,33 @@ Return only the JSON:
       internalLinking: 50,
       overall: 50,
     });
+
+    // Validate all scores are in 0-100 range
+    result.keywordDensity = clampScore(result.keywordDensity);
+    result.readabilityScore = clampScore(result.readabilityScore);
+    result.titleOptimization = clampScore(result.titleOptimization);
+    result.metaDescription = clampScore(result.metaDescription);
+    result.headingStructure = clampScore(result.headingStructure);
+    result.internalLinking = clampScore(result.internalLinking);
+    result.overall = clampScore(result.overall);
+
+    return result;
   }
 
   /**
    * Analyze Keywords
    */
   async analyzeKeywords(content: string, keywords: string[]): Promise<KeywordAnalysis[]> {
-    const results: KeywordAnalysis[] = [];
-    const trimmedContent = content.trim();
-    const words = trimmedContent ? trimmedContent.split(/\s+/).length : 1;
+    // Validate inputs
+    const validatedContent = validateContent(content);
+    const validatedKeywords = validateKeywords(keywords);
 
-    for (const keyword of keywords) {
+    const results: KeywordAnalysis[] = [];
+    const words = validatedContent.split(/\s+/).length;
+
+    for (const keyword of validatedKeywords) {
       const regex = new RegExp(escapeRegExp(keyword), 'gi');
-      const matches = trimmedContent.match(regex) || [];
+      const matches = validatedContent.match(regex) || [];
       const count = matches.length;
       const density = (count / words) * 100;
 
@@ -564,6 +728,12 @@ Return only the JSON:
         suggestions: [],
       });
 
+      // Validate score ranges
+      parsed.predictedEngagement = clampScore(parsed.predictedEngagement);
+      parsed.predictedCTR = clampScore(parsed.predictedCTR);
+      parsed.predictedConversions = clampScore(parsed.predictedConversions);
+      parsed.confidence = clampConfidence(parsed.confidence);
+
       predictions.push({
         variantId: variant.id,
         ...parsed,
@@ -608,10 +778,14 @@ Return only the JSON:
    * Generate Hashtags
    */
   async generateHashtags(content: string, count: number): Promise<string[]> {
-    const prompt = `
-Generate ${count} relevant hashtags for this content:
+    // Validate inputs
+    const validatedContent = validateContent(content);
+    const validatedCount = validateHashtagCount(count);
 
-"${content}"
+    const prompt = `
+Generate ${validatedCount} relevant hashtags for this content:
+
+"${validatedContent}"
 
 Requirements:
 - Mix of popular and niche hashtags
@@ -629,7 +803,7 @@ Return only the hashtags:
     });
 
     const hashtags = response.match(/#[\w-]+/g) || [];
-    return hashtags.slice(0, count);
+    return hashtags.slice(0, validatedCount);
   }
 
   /**
@@ -652,11 +826,14 @@ Return only the hashtags:
    * Generate Image Prompt
    */
   async generateImagePrompt(description: string, style: string): Promise<string> {
+    // Validate inputs
+    const validatedDescription = validateTopic(description);
+
     const prompt = `
 Generate a detailed AI image generation prompt for:
 
-Description: ${description}
-Style: ${style}
+Description: ${validatedDescription}
+Style: ${style || 'realistic'}
 
 Create a detailed, descriptive prompt that includes:
 - Subject details
@@ -681,10 +858,13 @@ Generate the prompt:
    * Generate Image Prompts for Blog
    */
   async generateImagePromptsForBlog(blogContent: string): Promise<string[]> {
+    // Validate inputs
+    const validatedContent = validateContent(blogContent);
+
     const prompt = `
 Analyze this blog content and generate 3-5 detailed image prompts for illustrative images:
 
-Blog Content: "${blogContent.substring(0, MAX_BLOG_CONTENT_PREVIEW_LENGTH)}..."
+Blog Content: "${validatedContent.substring(0, MAX_BLOG_CONTENT_PREVIEW_LENGTH)}..."
 
 For each image prompt, provide:
 - Subject description
@@ -724,10 +904,14 @@ Return only the JSON:
     emotion: Emotion,
     duration: number
   ): Promise<GeneratedVideoScript> {
-    const prompt = `
-Create a ${emotion} voice script about: ${topic}
+    // Validate inputs
+    const validatedTopic = validateTopic(topic);
+    const validatedDuration = validateDuration(duration);
 
-Duration: ${duration} seconds
+    const prompt = `
+Create a ${emotion} voice script about: ${validatedTopic}
+
+Duration: ${validatedDuration} seconds
 Emotion: ${emotion}
 
 The script should:
@@ -737,7 +921,7 @@ The script should:
 - Have appropriate pacing for the emotion
 - Include emotional cues in brackets where needed
 
-Approximate word count: ${Math.floor(duration * WORDS_PER_SECOND)} words
+Approximate word count: ${Math.floor(validatedDuration * WORDS_PER_SECOND)} words
 
 Generate in JSON format:
 {
@@ -748,7 +932,7 @@ Generate in JSON format:
 `;
 
     const response = await this.generateText(prompt, {
-      maxTokens: duration * TOKENS_PER_SECOND,
+      maxTokens: validatedDuration * TOKENS_PER_SECOND,
       temperature: 0.8,
     });
 
@@ -759,7 +943,7 @@ Generate in JSON format:
       }
       return {
         ...parsed,
-        duration,
+        duration: validatedDuration,
         wordCount: parsed.script.split(' ').length,
       };
     } catch (error) {
