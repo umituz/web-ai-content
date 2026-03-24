@@ -30,6 +30,14 @@ import {
   ABTestComparison,
 } from '../../domain/entities/ABTesting';
 import { SocialPlatform, ContentTone, Emotion, ContentType, PLATFORM_SPECS } from '../../domain/types';
+import { ProviderFactory, type ProviderConfig } from '../../infrastructure/providers/provider.factory';
+import type { TextGenerationRequest as ProviderTextRequest, ImageGenerationRequest, VideoGenerationRequest, ImageToVideoRequest, VideoToVideoRequest, GeneratedContent } from '../../domain/config/ProviderConfig';
+import { createGroqProvider } from '../../infrastructure/providers/groq.provider';
+import { createFalProvider } from '../../infrastructure/providers/fal.provider';
+import { createGeminiProvider } from '../../infrastructure/providers/gemini.provider';
+import { createPrunaProvider } from '../../infrastructure/providers/pruna.provider';
+import { parseAIResponse, safeJSONParse } from '../../infrastructure/utils/jsonParser';
+import { batchRequest, RequestPriority } from '../../infrastructure/utils/requestQueue';
 
 /**
  * Constants for content generation calculations
@@ -61,17 +69,10 @@ function escapeRegExp(text: string): string {
 
 /**
  * Parses JSON from AI response with fallback to default value
+ * Optimized version using the jsonParser utility
  */
 function parseJSONResponse<T>(response: string, fallback: T): T {
-  try {
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]) as T;
-    }
-  } catch (error) {
-    // Return fallback on parse error
-  }
-  return fallback;
+  return parseAIResponse(response, fallback);
 }
 
 /**
@@ -171,21 +172,48 @@ function clampConfidence(confidence: number): number {
 
 /**
  * AI Content Service Implementation
- * Uses Anthropic Claude API for content generation
+ * Uses multi-provider system for content generation
  */
 export class AIContentService implements IAIContentService {
-  private anthropic: Anthropic;
+  private anthropic: Anthropic | null = null;
   private model: string;
+  private providerFactory: ProviderFactory | null = null;
 
-  constructor(apiKey: string, model: string = 'claude-sonnet-4-20250514') {
-    this.anthropic = new Anthropic({ apiKey });
+  constructor(configOrApiKey: ProviderConfig | string, model: string = 'claude-sonnet-4-20250514') {
     this.model = model;
+
+    // Check if first argument is a ProviderConfig or API key string
+    if (typeof configOrApiKey === 'string') {
+      // Legacy: API key string
+      this.anthropic = new Anthropic({ apiKey: configOrApiKey });
+    } else {
+      // New: ProviderConfig
+      this.providerFactory = new ProviderFactory(configOrApiKey);
+
+      // Initialize providers based on config
+      if (configOrApiKey.groq?.enabled) {
+        this.providerFactory.register(createGroqProvider(configOrApiKey.groq));
+      }
+      if (configOrApiKey.fal?.enabled) {
+        this.providerFactory.register(createFalProvider(configOrApiKey.fal));
+      }
+      if (configOrApiKey.gemini?.enabled) {
+        this.providerFactory.register(createGeminiProvider(configOrApiKey.gemini));
+      }
+      if (configOrApiKey.pruna?.enabled) {
+        this.providerFactory.register(createPrunaProvider(configOrApiKey.pruna));
+      }
+    }
   }
 
   private async generateText(
     prompt: string,
     options: TextGenerationOptions = {}
   ): Promise<string> {
+    if (!this.anthropic) {
+      throw new Error('Anthropic provider not initialized. Please provide an API key.');
+    }
+
     const message = await this.anthropic.messages.create({
       model: options.model || this.model,
       max_tokens: options.maxTokens || 4096,
@@ -363,6 +391,7 @@ Generate in JSON format:
 
   /**
    * Generate for All Platforms
+   * Optimized with batching to avoid rate limiting
    */
   async generateForAllPlatforms(
     topic: string,
@@ -370,11 +399,32 @@ Generate in JSON format:
   ): Promise<GeneratedSocialContent[]> {
     const platforms: SocialPlatform[] = ['twitter', 'linkedin', 'instagram', 'threads', 'tiktok'];
 
-    const promises = platforms.map(platform =>
-      this.generateSocialContent({ topic, platform, tone })
+    // Use batching with controlled concurrency
+    const requests = platforms.map(platform =>
+      () => this.generateSocialContent({ topic, platform, tone })
     );
 
-    return Promise.all(promises);
+    try {
+      // Process in batches of 2 to avoid overwhelming the API
+      return await batchRequest(requests, {
+        concurrency: 2,
+        stopOnError: false, // Continue even if some requests fail
+      });
+    } catch (error) {
+      // Fallback to sequential execution if batching fails
+      console.warn('Batch execution failed, falling back to sequential:', error);
+      const results: GeneratedSocialContent[] = [];
+      for (const platform of platforms) {
+        try {
+          const result = await this.generateSocialContent({ topic, platform, tone });
+          results.push(result);
+        } catch (err) {
+          console.error(`Failed to generate for ${platform}:`, err);
+          // Continue with other platforms
+        }
+      }
+      return results;
+    }
   }
 
   /**
@@ -948,6 +998,66 @@ Generate in JSON format:
       };
     } catch (error) {
       throw new Error(`Failed to parse AI response: ${error}`);
+    }
+  }
+
+  /**
+   * Generate Image using multi-provider system
+   */
+  async generateImage(request: ImageGenerationRequest): Promise<GeneratedContent> {
+    if (!this.providerFactory) {
+      throw new Error('Provider factory not initialized. Please provide ProviderConfig to constructor.');
+    }
+
+    try {
+      return await this.providerFactory.generateImage(request);
+    } catch (error) {
+      throw new Error(`Image generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Generate Video using multi-provider system
+   */
+  async generateVideo(request: VideoGenerationRequest): Promise<GeneratedContent> {
+    if (!this.providerFactory) {
+      throw new Error('Provider factory not initialized. Please provide ProviderConfig to constructor.');
+    }
+
+    try {
+      return await this.providerFactory.generateVideo(request);
+    } catch (error) {
+      throw new Error(`Video generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Convert Image to Video using multi-provider system
+   */
+  async convertImageToVideo(request: ImageToVideoRequest): Promise<GeneratedContent> {
+    if (!this.providerFactory) {
+      throw new Error('Provider factory not initialized. Please provide ProviderConfig to constructor.');
+    }
+
+    try {
+      return await this.providerFactory.imageToVideo(request);
+    } catch (error) {
+      throw new Error(`Image-to-video conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Transform Video (video-to-video) using multi-provider system
+   */
+  async transformVideo(request: VideoToVideoRequest): Promise<GeneratedContent> {
+    if (!this.providerFactory) {
+      throw new Error('Provider factory not initialized. Please provide ProviderConfig to constructor.');
+    }
+
+    try {
+      return await this.providerFactory.videoToVideo(request);
+    } catch (error) {
+      throw new Error(`Video-to-video transformation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }
