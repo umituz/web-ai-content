@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import { AIContentService } from '../../application/services/AIContentService';
 import type {
   BlogGenerationRequest,
@@ -25,15 +25,21 @@ import type {
   ABTestComparison,
 } from '../../domain/entities/ABTesting';
 import type { ContentTone, Emotion } from '../../domain/types';
+import type { ProviderConfig } from '../../domain/config/ProviderConfig';
+import type { ImageGenerationRequest, VideoGenerationRequest, ImageToVideoRequest, VideoToVideoRequest, GeneratedContent } from '../../domain/config/ProviderConfig';
 
 interface UseAIContentOptions {
-  apiKey: string;
+  providers?: ProviderConfig;
+  apiKey?: string; // Deprecated: Use providers instead
   model?: string;
+  onError?: (error: Error) => void;
+  onProgress?: (progress: number) => void;
 }
 
 interface UseAIContentReturn {
   // State
   isLoading: boolean;
+  progress: number;
   error: string | null;
 
   // Blog Generation
@@ -69,22 +75,86 @@ interface UseAIContentReturn {
 
   // Voice Content
   generateVoiceScript: (topic: string, emotion: Emotion, duration: number) => Promise<GeneratedVideoScript | null>;
+
+  // NEW: Image Generation
+  generateImage: (request: ImageGenerationRequest) => Promise<GeneratedContent | null>;
+
+  // NEW: Video Generation
+  generateVideo: (request: VideoGenerationRequest) => Promise<GeneratedContent | null>;
+
+  // NEW: Image to Video
+  convertImageToVideo: (request: ImageToVideoRequest) => Promise<GeneratedContent | null>;
+
+  // NEW: Video to Video
+  transformVideo: (request: VideoToVideoRequest) => Promise<GeneratedContent | null>;
 }
 
 export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
   const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const service = useMemo(() => new AIContentService(options.apiKey, options.model), [options.apiKey, options.model]);
+  // Stabilize callbacks with refs to avoid unnecessary re-renders
+  const onProgressRef = useRef(options.onProgress);
+  const onErrorRef = useRef(options.onError);
+
+  // Update refs when callbacks change
+  useMemo(() => {
+    onProgressRef.current = options.onProgress;
+    onErrorRef.current = options.onError;
+  }, [options.onProgress, options.onError]);
+
+  // Use ref to track if service has been created with these exact configs
+  const serviceRef = useRef<{
+    service: AIContentService;
+    providers: ProviderConfig | string;
+    model?: string;
+  } | null>(null);
+
+  const service = useMemo(() => {
+    const configKey = options.providers || options.apiKey;
+    const modelKey = options.model;
+
+    // Check if we can reuse existing service
+    if (serviceRef.current &&
+        serviceRef.current.providers === configKey &&
+        serviceRef.current.model === modelKey) {
+      return serviceRef.current.service;
+    }
+
+    // Create new service
+    let newService: AIContentService;
+    if (options.providers) {
+      newService = new AIContentService(options.providers);
+    } else if (options.apiKey) {
+      newService = new AIContentService(options.apiKey, options.model);
+    } else {
+      throw new Error('Either providers or apiKey must be provided');
+    }
+
+    // Cache the service
+    serviceRef.current = {
+      service: newService,
+      providers: configKey,
+      model: modelKey,
+    };
+
+    return newService;
+  }, [options.providers, options.apiKey, options.model]);
 
   const generateBlogPost = useCallback(async (request: BlogGenerationRequest) => {
     setIsLoading(true);
+    setProgress(0);
     setError(null);
     try {
       const result = await service.generateBlogPost(request);
+      setProgress(100);
+      onProgressRef.current?.(100);
       return result;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate blog post');
+      const error = err instanceof Error ? err : new Error('Failed to generate blog post');
+      setError(error.message);
+      onErrorRef.current?.(error);
       return null;
     } finally {
       setIsLoading(false);
@@ -261,12 +331,97 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
 
   const generateVoiceScript = useCallback(async (topic: string, emotion: Emotion, duration: number) => {
     setIsLoading(true);
+    setProgress(0);
     setError(null);
     try {
       const result = await service.generateVoiceScript(topic, emotion, duration);
+      setProgress(100);
+      onProgressRef.current?.(100);
       return result;
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate voice script');
+      const error = err instanceof Error ? err : new Error('Failed to generate voice script');
+      setError(error.message);
+      onErrorRef.current?.(error);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [service]);
+
+  // NEW: Image generation
+  const generateImage = useCallback(async (request: ImageGenerationRequest) => {
+    setIsLoading(true);
+    setProgress(0);
+    setError(null);
+    try {
+      const result = await service.generateImage(request);
+      setProgress(100);
+      onProgressRef.current?.(100);
+      return result;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to generate image');
+      setError(error.message);
+      onErrorRef.current?.(error);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [service]);
+
+  // NEW: Video generation
+  const generateVideo = useCallback(async (request: VideoGenerationRequest) => {
+    setIsLoading(true);
+    setProgress(0);
+    setError(null);
+    try {
+      const result = await service.generateVideo(request);
+      setProgress(100);
+      onProgressRef.current?.(100);
+      return result;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to generate video');
+      setError(error.message);
+      onErrorRef.current?.(error);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [service]);
+
+  // NEW: Image to video
+  const convertImageToVideo = useCallback(async (request: ImageToVideoRequest) => {
+    setIsLoading(true);
+    setProgress(0);
+    setError(null);
+    try {
+      const result = await service.convertImageToVideo(request);
+      setProgress(100);
+      onProgressRef.current?.(100);
+      return result;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to convert image to video');
+      setError(error.message);
+      onErrorRef.current?.(error);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [service]);
+
+  // NEW: Video to video
+  const transformVideo = useCallback(async (request: VideoToVideoRequest) => {
+    setIsLoading(true);
+    setProgress(0);
+    setError(null);
+    try {
+      const result = await service.transformVideo(request);
+      setProgress(100);
+      onProgressRef.current?.(100);
+      return result;
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error('Failed to transform video');
+      setError(error.message);
+      onErrorRef.current?.(error);
       return null;
     } finally {
       setIsLoading(false);
@@ -275,6 +430,7 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
 
   return {
     isLoading,
+    progress,
     error,
     generateBlogPost,
     generateSocialContent,
@@ -290,5 +446,9 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
     generateHashtags,
     generateImagePrompt,
     generateVoiceScript,
+    generateImage,
+    generateVideo,
+    convertImageToVideo,
+    transformVideo,
   };
 }

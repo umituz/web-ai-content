@@ -1,7 +1,7 @@
 {
   "name": "@umituz/web-ai-content",
-  "version": "1.0.6",
-  "description": "AI-powered content generation suite with platform-specific optimization, sentiment analysis, and SEO tools",
+  "version": "2.0.1",
+  "description": "Comprehensive AI content generation suite with text, image, video, and wizard flow orchestration",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
@@ -29,6 +29,16 @@
       "types": "./dist/presentation/index.d.ts",
       "import": "./dist/presentation/index.mjs",
       "require": "./dist/presentation/index.js"
+    },
+    "./providers": {
+      "types": "./dist/infrastructure/providers/index.d.ts",
+      "import": "./dist/infrastructure/providers/index.mjs",
+      "require": "./dist/infrastructure/providers/index.js"
+    },
+    "./wizard": {
+      "types": "./dist/application/flows/index.d.ts",
+      "import": "./dist/application/flows/index.mjs",
+      "require": "./dist/application/flows/index.js"
     }
   },
   "files": [
@@ -36,24 +46,28 @@
     "src"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/domain/index.ts src/application/index.ts src/presentation/index.ts --format cjs,esm --dts --clean --external react",
-    "dev": "tsup src/index.ts src/domain/index.ts src/application/index.ts src/presentation/index.ts --format cjs,esm --dts --watch --external react",
+    "build": "tsup src/index.ts src/domain/index.ts src/application/index.ts src/presentation/index.ts src/infrastructure/providers/index.ts src/application/flows/index.ts --format cjs,esm --dts --clean --external react",
+    "dev": "tsup src/index.ts src/domain/index.ts src/application/index.ts src/presentation/index.ts src/infrastructure/providers/index.ts src/application/flows/index.ts --format cjs,esm --dts --watch --external react",
     "lint": "tsc --noEmit"
   },
   "keywords": [
     "ai",
     "content-generation",
+    "text-to-image",
+    "text-to-video",
+    "image-to-video",
+    "wizard-flow",
+    "multi-provider",
+    "groq",
+    "fal",
+    "pruna",
+    "gemini",
     "seo",
-    "sentiment-analysis",
     "social-media",
     "blog",
     "video-script",
-    "hashtags",
-    "a-b-testing",
-    "platform-optimization",
     "typescript",
-    "react",
-    "web"
+    "react"
   ],
   "author": "umituz",
   "license": "MIT",
