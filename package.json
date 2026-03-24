@@ -1,6 +1,6 @@
 {
   "name": "@umituz/web-ai-content",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Comprehensive AI content generation suite with text, image, video, and wizard flow orchestration",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -48,7 +48,7 @@
   "scripts": {
     "build": "tsup src/index.ts src/domain/index.ts src/application/index.ts src/presentation/index.ts src/infrastructure/providers/index.ts src/application/flows/index.ts --format cjs,esm --dts --clean --external react",
     "dev": "tsup src/index.ts src/domain/index.ts src/application/index.ts src/presentation/index.ts src/infrastructure/providers/index.ts src/application/flows/index.ts --format cjs,esm --dts --watch --external react",
-    "lint": "tsc --noEmit"
+    "lint": "eslint ."
   },
   "keywords": [
     "ai",
@@ -71,13 +71,24 @@
   ],
   "author": "umituz",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/umituz/web-ai-content"
+  },
+  "bugs": {
+    "url": "https://github.com/umituz/web-ai-content/issues"
+  },
+  "homepage": "https://github.com/umituz/web-ai-content#readme",
   "peerDependencies": {
     "react": ">=18"
   },
   "devDependencies": {
+    "@eslint/js": "^9.32.0",
     "@types/react": "^18.2.0",
+    "eslint": "^9.32.0",
     "tsup": "^8.0.0",
-    "typescript": "^5.0.0"
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.38.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1"
