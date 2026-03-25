@@ -1,6 +1,6 @@
 {
   "name": "@umituz/web-ai-content",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "description": "Comprehensive AI content generation suite with text, image, video, and wizard flow orchestration",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
