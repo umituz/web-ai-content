@@ -107,7 +107,7 @@ export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
   // Use ref to track if service has been created with these exact configs
   const serviceRef = useRef<{
     service: AIContentService;
-    providers: ProviderConfig | string;
+    providers: ProviderConfig | string | undefined;
     model?: string;
   } | null>(null);
 
