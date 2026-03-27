@@ -4,3 +4,4 @@ export * from './hooks/useSocialContentGenerator';
 export * from './hooks/useContentWizard';
 export * from './hooks/useImageWizard';
 export * from './hooks/useVideoWizard';
+export * from './hooks/useAIGeneration';

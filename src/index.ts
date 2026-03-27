@@ -37,6 +37,34 @@ export type { SocialPlatform, ContentTone, ContentType, Emotion, Sentiment, Blog
 export type { ProviderConfig, ProviderHealth, ProviderType, BaseProviderConfig, GroqConfig, FalConfig, PrunaConfig, GeminiConfig } from './domain/config/ProviderConfig';
 export type { GenerationRequest, TextGenerationRequest, ImageGenerationRequest, VideoGenerationRequest, ImageToVideoRequest, VideoToVideoRequest, GeneratedContent } from './domain/config/ProviderConfig';
 
+// Domain Layer - AI Generation Types
+export type {
+  GenerationType,
+  ImageQuality,
+  VideoQuality,
+  AspectRatio,
+  GenerationStatus,
+  ImageGenerationInput,
+  VideoGenerationInput,
+  GenerationResult,
+  GenerationMetadata,
+  GenerationProgress,
+  CreditCost,
+} from './domain/types/GenerationTypes';
+export { GENERATION_COSTS, calculateCreditCost } from './domain/types/GenerationTypes';
+
+// Domain Layer - AI Generation Constants
+export {
+  ASPECT_RATIO_OPTIONS,
+  IMAGE_QUALITY_OPTIONS,
+  VIDEO_QUALITY_OPTIONS,
+  VIDEO_DURATION_OPTIONS,
+  MOTION_OPTIONS,
+  STYLE_PRESETS,
+  getDimensionsForAspectRatio,
+  getRecommendedQuality,
+} from './domain/constants/GenerationConstants';
+
 // Domain Layer - Entities
 export type { BlogGenerationRequest, GeneratedBlog, SocialContentRequest, GeneratedSocialContent, VideoScriptRequest, GeneratedVideoScript, ContentCalendarEntry } from './domain/entities/ContentGeneration';
 export type { ContentAnalysisRequest, ContentAnalysisResult, SentimentAnalysisResult } from './domain/entities/SentimentAnalysis';
@@ -63,7 +91,7 @@ export { createProviderFactory } from './infrastructure/providers/provider.facto
 export { GroqProvider, createGroqProvider } from './infrastructure/providers/groq.provider';
 export { FalProvider, createFalProvider } from './infrastructure/providers/fal.provider';
 export { GeminiProvider, createGeminiProvider } from './infrastructure/providers/gemini.provider';
-export { PrunaProvider, createPrunaProvider } from './infrastructure/providers/pruna.provider';
+export { PrunaProvider, createPrunaProvider, generateWithPruna } from './infrastructure/providers/pruna.provider';
 
 // Presentation Layer - Hooks
 export { useAIContent } from './presentation/hooks/useAIContent';
@@ -72,3 +100,5 @@ export { useImageWizard } from './presentation/hooks/useImageWizard';
 export { useVideoWizard } from './presentation/hooks/useVideoWizard';
 export { useBlogGenerator } from './presentation/hooks/useBlogGenerator';
 export { useSocialContentGenerator } from './presentation/hooks/useSocialContentGenerator';
+export { useAIGeneration } from './presentation/hooks/useAIGeneration';
+export type { UseAIGenerationOptions, UseAIGenerationReturn } from './presentation/hooks/useAIGeneration';
