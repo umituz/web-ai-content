@@ -3,7 +3,7 @@
  * Step-by-step wizard for AI content generation
  */
 
-import { WizardFlow, type WizardConfig, type WizardStep } from './base.wizard';
+import type { WizardStep } from './base.wizard';
 import type { BlogGenerationRequest, SocialContentRequest, VideoScriptRequest } from '../../domain/entities/ContentGeneration';
 
 /**
@@ -54,140 +54,104 @@ export interface ContentWizardData {
 }
 
 /**
- * Content Wizard Flow
+ * Predefined steps for the content wizard.
+ * Exported as data so both the imperative flows and the React hook
+ * share the exact same step definition.
  */
-export class ContentWizard extends WizardFlow<ContentWizardStep> {
-  constructor() {
-    const steps = [
-      {
-        id: 'select-type',
-        label: 'Select Type',
-        icon: 'Layers',
-        description: 'Choose the type of content you want to generate',
-        validate: (data: ContentWizardData) => !!data.contentType,
-      },
-      {
-        id: 'input-topic',
-        label: 'Topic',
-        icon: 'Lightbulb',
-        description: 'Enter your topic or idea',
-        validate: (data: ContentWizardData) => !!data.topic && data.topic.length > 0,
-      },
-      {
-        id: 'configure',
-        label: 'Configure',
-        icon: 'Settings',
-        description: 'Set tone, audience, and platform',
-        validate: (data: ContentWizardData) => !!data.tone && !!data.targetAudience,
-      },
-      {
-        id: 'advanced',
-        label: 'Advanced',
-        icon: 'Sliders',
-        description: 'Additional options and optimizations',
-        optional: true,
-      },
-      {
-        id: 'preview',
-        label: 'Preview',
-        icon: 'Eye',
-        description: 'Review your settings before generation',
-      },
-      {
-        id: 'generating',
-        label: 'Generating',
-        icon: 'Sparkles',
-        description: 'AI is generating your content',
-      },
-      {
-        id: 'results',
-        label: 'Results',
-        icon: 'CheckCircle',
-        description: 'Your generated content is ready',
-      },
-    ] as WizardStep<ContentWizardStep>[];
-
-    super({
-      steps,
-      initialStep: 'select-type',
-      data: {},
-    });
-  }
-
-  /**
-   * Get typed wizard data
-   */
-  getContentData(): ContentWizardData {
-    return this.getData() as ContentWizardData;
-  }
-
-  /**
-   * Update content wizard data
-   */
-  updateContentData(updates: Partial<ContentWizardData>): void {
-    this.updateData(updates);
-  }
-
-  /**
-   * Build generation request based on content type
-   */
-  buildRequest(): BlogGenerationRequest | SocialContentRequest | VideoScriptRequest {
-    const data = this.getContentData();
-
-    switch (data.contentType) {
-      case 'blog':
-        return {
-          topic: data.topic || '',
-          blogType: 'tutorial',
-          targetKeywords: data.keywords || [],
-          tone: data.tone || 'professional',
-          wordCount: data.wordCount || 1000,
-          targetAudience: data.targetAudience || '',
-          seoOptimization: data.seoOptimization || false,
-          includeImages: data.includeImages || false,
-          includeSchema: false,
-        };
-
-      case 'social':
-        return {
-          topic: data.topic || '',
-          platform: data.platform || 'twitter',
-          tone: data.tone || 'casual',
-          hashtags: true,
-          maxLength: undefined,
-          targetAudience: data.targetAudience,
-          includeCallToAction: data.includeCallToAction,
-        };
-
-      case 'script':
-        return {
-          topic: data.topic || '',
-          tone: data.tone || 'professional',
-          duration: data.duration || 60,
-          targetAudience: data.targetAudience || '',
-          includeVisuals: true,
-          includeCallToAction: data.includeCallToAction || false,
-        };
-
-      default:
-        throw new Error(`Unsupported content type: ${data.contentType}`);
-    }
-  }
-
-  /**
-   * Set generated content
-   */
-  setGeneratedResult(content: string, id: string): void {
-    this.updateContentData({
-      generatedContent: content,
-      generatedId: id,
-    });
-  }
-}
+export const CONTENT_WIZARD_STEPS: ReadonlyArray<WizardStep<ContentWizardStep>> = [
+  {
+    id: 'select-type',
+    label: 'Select Type',
+    icon: 'Layers',
+    description: 'Choose the type of content you want to generate',
+    validate: (data) => Boolean((data as ContentWizardData).contentType),
+  },
+  {
+    id: 'input-topic',
+    label: 'Topic',
+    icon: 'Lightbulb',
+    description: 'Enter your topic or idea',
+    validate: (data) => {
+      const topic = (data as ContentWizardData).topic;
+      return typeof topic === 'string' && topic.length > 0;
+    },
+  },
+  {
+    id: 'configure',
+    label: 'Configure',
+    icon: 'Settings',
+    description: 'Set tone, audience, and platform',
+    validate: (data) => {
+      const d = data as ContentWizardData;
+      return Boolean(d.tone && d.targetAudience);
+    },
+  },
+  {
+    id: 'advanced',
+    label: 'Advanced',
+    icon: 'Sliders',
+    description: 'Additional options and optimizations',
+    optional: true,
+  },
+  {
+    id: 'preview',
+    label: 'Preview',
+    icon: 'Eye',
+    description: 'Review your settings before generation',
+  },
+  {
+    id: 'generating',
+    label: 'Generating',
+    icon: 'Sparkles',
+    description: 'AI is generating your content',
+  },
+  {
+    id: 'results',
+    label: 'Results',
+    icon: 'CheckCircle',
+    description: 'Your generated content is ready',
+  },
+];
 
 /**
- * Create a content wizard
+ * Build a typed generation request from the wizard's collected data.
+ * Throws when called before the data-collection steps are complete.
  */
-export function createContentWizard(): ContentWizard {
-  return new ContentWizard();
+export function buildContentRequest(
+  data: ContentWizardData,
+): BlogGenerationRequest | SocialContentRequest | VideoScriptRequest {
+  switch (data.contentType) {
+    case 'blog':
+      return {
+        topic: data.topic ?? '',
+        blogType: 'tutorial',
+        targetKeywords: data.keywords ?? [],
+        tone: data.tone ?? 'professional',
+        wordCount: data.wordCount ?? 1000,
+        targetAudience: data.targetAudience ?? '',
+        seoOptimization: data.seoOptimization ?? false,
+        includeImages: data.includeImages ?? false,
+        includeSchema: false,
+      };
+    case 'social':
+      return {
+        topic: data.topic ?? '',
+        platform: data.platform ?? 'twitter',
+        tone: data.tone ?? 'casual',
+        hashtags: true,
+        targetAudience: data.targetAudience,
+        includeCallToAction: data.includeCallToAction,
+      };
+    case 'script':
+      return {
+        topic: data.topic ?? '',
+        tone: data.tone ?? 'professional',
+        duration: data.duration ?? 60,
+        targetAudience: data.targetAudience ?? '',
+        includeVisuals: true,
+        includeCallToAction: data.includeCallToAction ?? false,
+      };
+    default:
+      throw new Error(`Unsupported content type: ${data.contentType}`);
+  }
 }

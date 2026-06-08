@@ -1,10 +1,20 @@
+/**
+ * AI Content Service (Facade)
+ *
+ * Thin orchestrator that delegates to focused feature services:
+ * - BlogService, SocialService, VideoScriptService, AnalysisService,
+ *   SeoService, ABTestService, ImagePromptService, ContentCalendarService,
+ *   MediaGenerationService.
+ *
+ * The facade keeps the public IAIContentService contract intact for existing
+ * consumers while the underlying work is split along single-responsibility lines.
+ */
+
 import Anthropic from '@anthropic-ai/sdk';
-import {
-  IAIContentService,
-  IAIProvider,
-  TextGenerationOptions,
-} from '../../domain/interfaces/IAIContentService';
-import {
+import type { IAIContentService } from '../../domain/interfaces/IAIContentService';
+import type { ITextGenerator, TextGenerationOptions } from '../../domain/interfaces/ITextGenerator';
+import { AnthropicDefaults } from '../../domain/limits/ModelDefaults';
+import type {
   BlogGenerationRequest,
   GeneratedBlog,
   SocialContentRequest,
@@ -13,1051 +23,269 @@ import {
   GeneratedVideoScript,
   ContentCalendarEntry,
 } from '../../domain/entities/ContentGeneration';
-import {
+import type {
   ContentAnalysisRequest,
   ContentAnalysisResult,
   SentimentAnalysisResult,
 } from '../../domain/entities/SentimentAnalysis';
-import {
+import type {
   SEOOptimizationRequest,
   SEOOptimizationResult,
   SEOScoreBreakdown,
   KeywordAnalysis,
 } from '../../domain/entities/SEO';
-import {
+import type {
   ABTestRequest,
   ABTestPrediction,
   ABTestComparison,
 } from '../../domain/entities/ABTesting';
-import { SocialPlatform, ContentTone, Emotion, ContentType, PLATFORM_SPECS } from '../../domain/types';
-import { ProviderFactory, type ProviderConfig } from '../../infrastructure/providers/provider.factory';
-import type { TextGenerationRequest as ProviderTextRequest, ImageGenerationRequest, VideoGenerationRequest, ImageToVideoRequest, VideoToVideoRequest, GeneratedContent } from '../../domain/config/ProviderConfig';
+import type { SocialPlatform, ContentTone, Emotion } from '../../domain/types';
+import type { ProviderConfig } from '../../domain/config/ProviderConfig';
+import type {
+  ImageGenerationRequest,
+  VideoGenerationRequest,
+  ImageToVideoRequest,
+  VideoToVideoRequest,
+  GeneratedContent,
+} from '../../domain/config/ProviderConfig';
+import { ProviderFactory, createProviderFactory } from '../../infrastructure/providers/provider.factory';
 import { createGroqProvider } from '../../infrastructure/providers/groq.provider';
 import { createFalProvider } from '../../infrastructure/providers/fal.provider';
 import { createGeminiProvider } from '../../infrastructure/providers/gemini.provider';
 import { createPrunaProvider } from '../../infrastructure/providers/pruna.provider';
-import { parseAIResponse, safeJSONParse } from '../../infrastructure/utils/jsonParser';
-import { batchRequest, RequestPriority } from '../../infrastructure/utils/requestQueue';
+import { BlogService } from './BlogService';
+import { SocialService } from './SocialService';
+import { VideoScriptService } from './VideoScriptService';
+import { AnalysisService } from './AnalysisService';
+import { SeoService } from './SeoService';
+import { ABTestService } from './ABTestService';
+import { ImagePromptService } from './ImagePromptService';
+import { ContentCalendarService } from './ContentCalendarService';
+import { MediaGenerationService } from './ProviderServices';
+import { GenerationExecutor } from './GenerationExecutor';
 
-/**
- * Constants for content generation calculations
- */
-const WORDS_PER_SECOND = 2.5;
-const TOKENS_PER_SECOND = 10;
-const MAX_CONTENT_PREVIEW_LENGTH = 500;
-const MAX_VARIANT_CONTENT_LENGTH = 200;
-const MAX_BLOG_CONTENT_PREVIEW_LENGTH = 1000;
-
-/**
- * Validation limits for user inputs
- */
-const MAX_TOPIC_LENGTH = 500;
-const MAX_CONTENT_LENGTH = 10000;
-const MAX_KEYWORDS_COUNT = 20;
-const MAX_KEYWORD_LENGTH = 50;
-const MIN_DURATION_SECONDS = 10;
-const MAX_DURATION_SECONDS = 600;
-const MIN_DAYS = 1;
-const MAX_DAYS = 90;
-
-/**
- * Escapes special regex characters in a string to prevent ReDoS attacks
- */
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+interface AnthropicTextGeneratorOptions {
+  maxTokens?: number;
+  temperature?: number;
+  topP?: number;
+  model?: string;
 }
 
 /**
- * Parses JSON from AI response with fallback to default value
- * Optimized version using the jsonParser utility
+ * Anthropic text generator — implements the ITextGenerator strategy so that
+ * legacy Anthropic-only configurations can still drive the new service layer.
  */
-function parseJSONResponse<T>(response: string, fallback: T): T {
-  return parseAIResponse(response, fallback);
-}
+class AnthropicTextGenerator implements ITextGenerator {
+  constructor(
+    private readonly client: Anthropic,
+    private readonly defaultModel: string,
+  ) {}
 
-/**
- * Validates and trims topic input
- */
-function validateTopic(topic: string): string {
-  if (!topic || topic.trim().length === 0) {
-    throw new Error('Topic cannot be empty');
-  }
-  const trimmed = topic.trim();
-  if (trimmed.length > MAX_TOPIC_LENGTH) {
-    throw new Error(`Topic exceeds maximum length of ${MAX_TOPIC_LENGTH} characters`);
-  }
-  return trimmed;
-}
-
-/**
- * Validates and trims content input
- */
-function validateContent(content: string): string {
-  if (!content || content.trim().length === 0) {
-    throw new Error('Content cannot be empty');
-  }
-  const trimmed = content.trim();
-  if (trimmed.length > MAX_CONTENT_LENGTH) {
-    throw new Error(`Content exceeds maximum length of ${MAX_CONTENT_LENGTH} characters`);
-  }
-  return trimmed;
-}
-
-/**
- * Validates keywords array
- */
-function validateKeywords(keywords: string[]): string[] {
-  if (!Array.isArray(keywords)) {
-    throw new Error('Keywords must be an array');
-  }
-  if (keywords.length > MAX_KEYWORDS_COUNT) {
-    throw new Error(`Cannot process more than ${MAX_KEYWORDS_COUNT} keywords`);
-  }
-  return keywords
-    .filter(k => k && k.trim().length > 0)
-    .map(k => {
-      const trimmed = k.trim();
-      if (trimmed.length > MAX_KEYWORD_LENGTH) {
-        throw new Error(`Keyword "${trimmed.substring(0, 20)}..." exceeds maximum length of ${MAX_KEYWORD_LENGTH} characters`);
-      }
-      return trimmed;
-    });
-}
-
-/**
- * Validates duration in seconds
- */
-function validateDuration(duration: number): number {
-  if (!Number.isFinite(duration) || duration < MIN_DURATION_SECONDS || duration > MAX_DURATION_SECONDS) {
-    throw new Error(`Duration must be between ${MIN_DURATION_SECONDS} and ${MAX_DURATION_SECONDS} seconds`);
-  }
-  return duration;
-}
-
-/**
- * Validates days count
- */
-function validateDays(days: number): number {
-  if (!Number.isFinite(days) || days < MIN_DAYS || days > MAX_DAYS) {
-    throw new Error(`Days must be between ${MIN_DAYS} and ${MAX_DAYS}`);
-  }
-  return days;
-}
-
-/**
- * Validates hashtag count
- */
-function validateHashtagCount(count: number): number {
-  if (!Number.isFinite(count) || count < 1 || count > 50) {
-    throw new Error('Hashtag count must be between 1 and 50');
-  }
-  return Math.floor(count);
-}
-
-/**
- * Validates and clamps a score to 0-100 range
- */
-function clampScore(score: number): number {
-  if (!Number.isFinite(score)) return 50; // Default on invalid
-  return Math.max(0, Math.min(100, score));
-}
-
-/**
- * Validates and clamps a confidence value to 0-1 range
- */
-function clampConfidence(confidence: number): number {
-  if (!Number.isFinite(confidence)) return 0.5; // Default on invalid
-  return Math.max(0, Math.min(1, confidence));
-}
-
-/**
- * AI Content Service Implementation
- * Uses multi-provider system for content generation
- */
-export class AIContentService implements IAIContentService {
-  private anthropic: Anthropic | null = null;
-  private model: string;
-  private providerFactory: ProviderFactory | null = null;
-
-  constructor(configOrApiKey: ProviderConfig | string, model: string = 'claude-sonnet-4-20250514') {
-    this.model = model;
-
-    // Check if first argument is a ProviderConfig or API key string
-    if (typeof configOrApiKey === 'string') {
-      // Legacy: API key string
-      this.anthropic = new Anthropic({ apiKey: configOrApiKey });
-    } else {
-      // New: ProviderConfig
-      this.providerFactory = new ProviderFactory(configOrApiKey);
-
-      // Initialize providers based on config
-      if (configOrApiKey.groq?.enabled) {
-        this.providerFactory.register(createGroqProvider(configOrApiKey.groq));
-      }
-      if (configOrApiKey.fal?.enabled) {
-        this.providerFactory.register(createFalProvider(configOrApiKey.fal));
-      }
-      if (configOrApiKey.gemini?.enabled) {
-        this.providerFactory.register(createGeminiProvider(configOrApiKey.gemini));
-      }
-      if (configOrApiKey.pruna?.enabled) {
-        this.providerFactory.register(createPrunaProvider(configOrApiKey.pruna));
-      }
-    }
-  }
-
-  private async generateText(
-    prompt: string,
-    options: TextGenerationOptions = {}
-  ): Promise<string> {
-    if (!this.anthropic) {
-      throw new Error('Anthropic provider not initialized. Please provide an API key.');
-    }
-
-    const message = await this.anthropic.messages.create({
-      model: options.model || this.model,
-      max_tokens: options.maxTokens || 4096,
-      temperature: options.temperature || 0.7,
-      top_p: options.topP || 0.9,
+  async generateText(prompt: string, options: TextGenerationOptions = {}): Promise<string> {
+    const merged: AnthropicTextGeneratorOptions = {
+      maxTokens: options.maxTokens,
+      temperature: options.temperature,
+      model: options.model,
+      topP: options.topP,
+    };
+    const message = await this.client.messages.create({
+      model: merged.model || this.defaultModel,
+      max_tokens: merged.maxTokens || AnthropicDefaults.MAX_TOKENS,
+      temperature: merged.temperature ?? AnthropicDefaults.DEFAULT_TEMPERATURE,
+      top_p: merged.topP ?? AnthropicDefaults.DEFAULT_TOP_P,
       messages: [{ role: 'user', content: prompt }],
     });
-
-    const text = message.content[0];
-    if (text.type === 'text') {
-      return text.text;
+    const first = message.content[0];
+    if (first?.type === 'text') {
+      return first.text;
     }
     throw new Error('Unexpected response type from Anthropic API');
   }
 
-  /**
-   * Generate Blog Post
-   */
-  async generateBlogPost(request: BlogGenerationRequest): Promise<GeneratedBlog> {
-    // Validate inputs
-    const validatedTopic = validateTopic(request.topic);
-    const validatedKeywords = validateKeywords(request.targetKeywords);
-
-    const prompt = `
-As an expert SEO Content Strategist and Copywriter, generate a high-quality, comprehensive blog post.
-
-TOPIC: ${validatedTopic}
-TYPE: ${request.blogType}
-KEYWORDS: ${validatedKeywords.join(', ')}
-TONE: ${request.tone}
-TARGET AUDIENCE: ${request.targetAudience}
-WORD COUNT: ${request.wordCount}
-LANGUAGE: ${request.language || 'English'}
-
-OPTIMIZATION REQUIREMENTS:
-- SEO Optimization: ${request.seoOptimization ? 'ON (Include semantic keywords, LSI, and proper H1-H3 structure)' : 'OFF'}
-- Include Schema Markup: ${request.includeSchema ? 'ON (Generate JSON-LD for this blog type)' : 'OFF'}
-- Image Suggestions: ${request.includeImages ? 'ON (Provide DALL-E/Midjourney style prompts for contextually relevant images)' : 'OFF'}
-
-RESPONSE FORMAT (STRICT JSON ONLY):
-{
-  "title": "Compelling, Click-worthy Title",
-  "content": "Full markdown-formatted blog content with headers",
-  "metaDescription": "SEO-optimized description (150-160 chars)",
-  "seoScore": 0-100,
-  "readabilityScore": 0-100,
-  "keywords": ["list", "of", "optimized", "keywords"],
-  "performance": {
-    "readingTime": minutes (number),
-    "shareability": 0-10 (number),
-    "seoRank": 0-10 (number)
-  },
-  "schemaMarkup": "JSON-LD string (if requested)",
-  "imagePrompts": ["Prompt 1", "Prompt 2"] (if requested)
-}
-`;
-
-    const response = await this.generateText(prompt, {
-      maxTokens: request.wordCount * 2,
-      temperature: 0.7,
-    });
-
-    try {
-      const parsed = JSON.parse(response);
-      return {
-        id: Math.random().toString(36).substring(2, 11),
-        ...parsed,
-        blogType: request.blogType,
-        tone: request.tone,
-        wordCount: request.wordCount,
-        createdAt: new Date().toISOString(),
-      };
-    } catch (error) {
-      throw new Error(`Failed to parse AI response: ${error}`);
-    }
+  async *generateTextStream(prompt: string, options: TextGenerationOptions = {}): AsyncGenerator<string> {
+    const text = await this.generateText(prompt, options);
+    yield text;
   }
-
-  /**
-   * Generate Social Media Content
-   */
-  async generateSocialContent(request: SocialContentRequest): Promise<GeneratedSocialContent> {
-    // Validate inputs
-    const validatedTopic = validateTopic(request.topic);
-
-    const spec = PLATFORM_SPECS[request.platform];
-    const length = request.maxLength || spec.maxLength;
-
-    const prompt = `
-Write a ${request.tone} social media post about: ${validatedTopic}
-
-Platform: ${request.platform}
-Style: ${spec.style}
-Maximum length: ${length} characters
-${request.hashtags !== false ? 'Include relevant hashtags' : 'No hashtags'}
-${request.includeCallToAction ? 'Include a call-to-action' : ''}
-
-Requirements:
-- Platform-optimized formatting
-- Engaging hook in first sentence
-- Natural, conversational tone
-- Platform-appropriate emoji usage
-
-Generate the post in JSON format:
-{
-  "content": "The post content",
-  "hashtags": ["hashtag1", "hashtag2"],
-  "emojis": ["emoji1", "emoji2"],
-  "estimatedEngagement": 0-100
-}
-`;
-
-    const response = await this.generateText(prompt, {
-      maxTokens: 500,
-      temperature: 0.8,
-    });
-
-    try {
-      const parsed = JSON.parse(response);
-      return {
-        ...parsed,
-        platform: request.platform,
-        characterCount: parsed.content.length,
-      };
-    } catch (error) {
-      throw new Error(`Failed to parse AI response: ${error}`);
-    }
-  }
-
-  /**
-   * Generate Video Script
-   */
-  async generateVideoScript(request: VideoScriptRequest): Promise<GeneratedVideoScript> {
-    // Validate inputs
-    const validatedTopic = validateTopic(request.topic);
-    const validatedDuration = validateDuration(request.duration);
-
-    const prompt = `
-Create a ${request.tone} video script about: ${validatedTopic}
-
-Duration: ${validatedDuration} seconds
-Target Audience: ${request.targetAudience}
-Include Visual Cues: ${request.includeVisuals ? 'Yes' : 'No'}
-Include CTA: ${request.includeCallToAction ? 'Yes' : 'No'}
-
-Approximate word count: ${Math.floor(validatedDuration * WORDS_PER_SECOND)} words
-
-Generate in JSON format:
-{
-  "script": "Full script with dialogue and narration",
-  "visualCues": ["Visual cue 1", "Visual cue 2"],
-  "callToAction": "Call to action text (if requested)",
-  "estimatedEngagement": 0-100
-}
-`;
-
-    const response = await this.generateText(prompt, {
-      maxTokens: validatedDuration * TOKENS_PER_SECOND,
-      temperature: 0.8,
-    });
-
-    try {
-      const parsed = JSON.parse(response);
-      if (!parsed.script) {
-        throw new Error('AI response missing script field');
-      }
-      return {
-        ...parsed,
-        duration: validatedDuration,
-        wordCount: parsed.script.split(' ').length,
-      };
-    } catch (error) {
-      throw new Error(`Failed to parse AI response: ${error}`);
-    }
-  }
-
-  /**
-   * Generate for All Platforms
-   * Optimized with batching to avoid rate limiting
-   */
-  async generateForAllPlatforms(
-    topic: string,
-    tone: ContentTone
-  ): Promise<GeneratedSocialContent[]> {
-    const platforms: SocialPlatform[] = ['twitter', 'linkedin', 'instagram', 'threads', 'tiktok'];
-
-    // Use batching with controlled concurrency
-    const requests = platforms.map(platform =>
-      () => this.generateSocialContent({ topic, platform, tone })
-    );
-
-    try {
-      // Process in batches of 2 to avoid overwhelming the API
-      return await batchRequest(requests, {
-        concurrency: 2,
-        stopOnError: false, // Continue even if some requests fail
-      });
-    } catch (error) {
-      // Fallback to sequential execution if batching fails
-      console.warn('Batch execution failed, falling back to sequential:', error);
-      const results: GeneratedSocialContent[] = [];
-      for (const platform of platforms) {
-        try {
-          const result = await this.generateSocialContent({ topic, platform, tone });
-          results.push(result);
-        } catch (err) {
-          console.error(`Failed to generate for ${platform}:`, err);
-          // Continue with other platforms
-        }
-      }
-      return results;
-    }
-  }
-
-  /**
-   * Generate Content Calendar
-   */
-  async generateContentCalendar(niche: string, days: number): Promise<ContentCalendarEntry[]> {
-    // Validate inputs
-    const validatedNiche = validateTopic(niche);
-    const validatedDays = validateDays(days);
-
-    interface CalendarItem {
-      day: number;
-      topic: string;
-      contentType: ContentType;
-      platform: SocialPlatform;
-      description: string;
-      estimatedEngagement: number;
-      priority: 'high' | 'medium' | 'low';
-    }
-    const prompt = `
-Generate a ${validatedDays}-day content calendar for: ${validatedNiche}
-
-For each day, provide:
-- Topic
-- Content type (blog, video, social, email, caption, script)
-- Best platform for this content
-- Brief description
-- Estimated engagement (0-100)
-- Priority level (high, medium, low)
-
-Format as JSON array:
-[
-  {
-    "day": 1,
-    "topic": "...",
-    "contentType": "blog|video|social|email|caption|script",
-    "platform": "twitter|linkedin|instagram|threads|tiktok|facebook",
-    "description": "...",
-    "estimatedEngagement": 0-100,
-    "priority": "high|medium|low"
-  }
-]
-
-Requirements:
-- Mix of content types across platforms
-- Platform-appropriate suggestions
-- Engaging, varied topics
-- Realistic posting schedule
-`;
-
-    const response = await this.generateText(prompt, {
-      maxTokens: validatedDays * 100,
-      temperature: 0.8,
-    });
-
-    try {
-      const data = JSON.parse(response) as CalendarItem[];
-      return data.map((item) => ({
-        date: new Date(Date.now() + (item.day - 1) * 24 * 60 * 60 * 1000),
-        topic: item.topic,
-        contentType: item.contentType,
-        platform: item.platform,
-        description: item.description,
-        estimatedEngagement: item.estimatedEngagement,
-        priority: item.priority,
-      }));
-    } catch (error) {
-      throw new Error(`Failed to parse AI response: ${error}`);
-    }
-  }
-
-  /**
-   * Analyze Sentiment
-   */
-  async analyzeSentiment(content: string): Promise<SentimentAnalysisResult> {
-    // Validate inputs
-    const validatedContent = validateContent(content);
-
-    const prompt = `
-Analyze the sentiment of this social media post:
-
-"${validatedContent}"
-
-Provide analysis in JSON format:
-{
-  "sentiment": "positive|neutral|negative",
-  "confidence": 0-1,
-  "emotions": [
-    {"emotion": "happy|excited|calm|sad|angry|surprised|fearful|disgusted|neutral", "score": 0-1}
-  ]
 }
 
-Return only the JSON:
-`;
-
-    const response = await this.generateText(prompt, {
-      maxTokens: 200,
-      temperature: 0.3,
-    });
-
-    const result = parseJSONResponse<SentimentAnalysisResult>(response, {
-      sentiment: 'neutral',
-      confidence: 0.5,
-      emotions: [],
-    });
-
-    // Validate confidence is in 0-1 range
-    result.confidence = clampConfidence(result.confidence);
-
-    return result;
-  }
-
-  /**
-   * Analyze Content
-   */
-  async analyzeContent(request: ContentAnalysisRequest): Promise<ContentAnalysisResult> {
-    // Validate inputs
-    const validatedContent = validateContent(request.content);
-
-    const sentimentResult = await this.analyzeSentiment(validatedContent);
-
-    const prompt = `
-Analyze this content:
-
-"${validatedContent}"
-
-Provide analysis in JSON format:
-{
-  "keywords": ["keyword1", "keyword2", ...],
-  "entities": ["entity1", "entity2", ...],
-  "suggestedImprovements": ["suggestion1", ...],
-  "readabilityScore": 0-100,
-  "estimatedEngagement": 0-100
+interface ServiceBundle {
+  providerFactory: ProviderFactory;
+  blogService: BlogService;
+  socialService: SocialService;
+  videoScriptService: VideoScriptService;
+  analysisService: AnalysisService;
+  seoService: SeoService;
+  abTestService: ABTestService;
+  imagePromptService: ImagePromptService;
+  contentCalendarService: ContentCalendarService;
+  mediaGenerationService: MediaGenerationService;
 }
 
-Return only the JSON:
-`;
-
-    const response = await this.generateText(prompt, {
-      maxTokens: 300,
-      temperature: 0.5,
+const buildServices = (
+  configOrApiKey: ProviderConfig | string,
+  model: string,
+): ServiceBundle => {
+  if (typeof configOrApiKey === 'string') {
+    const generator = new AnthropicTextGenerator(new Anthropic({ apiKey: configOrApiKey }), model);
+    const executor = new GenerationExecutor(generator);
+    // Anthropic-only mode: factory has no providers, media-generation methods
+    // will surface a clear error explaining ProviderConfig is required.
+    const emptyFactory = new ProviderFactory({
+      priority: [],
+      fallbackEnabled: false,
+      retryAttempts: 0,
+      timeout: 0,
     });
-
-    const parsed = parseJSONResponse(response, {
-      keywords: [] as string[],
-      entities: [] as string[],
-      suggestedImprovements: [] as string[],
-      readabilityScore: 50,
-      estimatedEngagement: 50,
-    });
-
-    // Validate score ranges
-    parsed.readabilityScore = clampScore(parsed.readabilityScore);
-    parsed.estimatedEngagement = clampScore(parsed.estimatedEngagement);
-
     return {
-      sentiment: sentimentResult,
-      keywords: parsed.keywords,
-      entities: parsed.entities,
-      suggestedImprovements: parsed.suggestedImprovements,
-      readabilityScore: parsed.readabilityScore,
-      estimatedEngagement: parsed.estimatedEngagement,
+      providerFactory: emptyFactory,
+      blogService: new BlogService(executor),
+      socialService: new SocialService(executor),
+      videoScriptService: new VideoScriptService(executor),
+      analysisService: new AnalysisService(executor),
+      seoService: new SeoService(executor),
+      abTestService: new ABTestService(executor),
+      imagePromptService: new ImagePromptService(executor),
+      contentCalendarService: new ContentCalendarService(executor),
+      mediaGenerationService: new MediaGenerationService(emptyFactory),
     };
   }
 
-  /**
-   * Optimize SEO
-   */
-  async optimizeSEO(request: SEOOptimizationRequest): Promise<SEOOptimizationResult> {
-    // Validate inputs
-    const validatedContent = validateContent(request.content);
-    const validatedKeywords = validateKeywords(request.keywords);
-
-    const prompt = `
-Optimize this content for SEO:
-
-Content: "${validatedContent}"
-Keywords: ${validatedKeywords.join(', ')}
-
-Tasks:
-1. Incorporate keywords naturally
-2. Improve engagement potential
-3. Add relevant call-to-action if appropriate
-4. Optimize for readability
-5. Enhance heading structure
-
-Return JSON:
-{
-  "optimized": "...",
-  "score": 0-100,
-  "suggestions": ["suggestion1", ...],
-  "addedKeywords": ["keyword1", ...],
-  "removedFillerWords": number,
-  "readabilityImprovements": ["improvement1", ...],
-  "metaDescription": "SEO-optimized meta description",
-  "titleSuggestions": ["title1", ...]
-}
-
-Return only the JSON:
-`;
-
-    const response = await this.generateText(prompt, {
-      maxTokens: 1000,
-      temperature: 0.7,
-    });
-
-    const result = parseJSONResponse(response, {
-      optimized: validatedContent,
-      score: 50,
-      suggestions: [],
-      addedKeywords: [],
-      removedFillerWords: 0,
-      readabilityImprovements: [],
-    });
-
-    // Validate score is in 0-100 range
-    result.score = clampScore(result.score);
-
-    return result;
+  const factory = createProviderFactory(configOrApiKey);
+  if (configOrApiKey.groq?.enabled) {
+    factory.register(createGroqProvider(configOrApiKey.groq));
+  }
+  if (configOrApiKey.fal?.enabled) {
+    factory.register(createFalProvider(configOrApiKey.fal));
+  }
+  if (configOrApiKey.gemini?.enabled) {
+    factory.register(createGeminiProvider(configOrApiKey.gemini));
+  }
+  if (configOrApiKey.pruna?.enabled) {
+    factory.register(createPrunaProvider(configOrApiKey.pruna));
   }
 
-  /**
-   * Calculate SEO Score
-   */
-  async calculateSEOScore(content: string, keywords: string[]): Promise<SEOScoreBreakdown> {
-    // Validate inputs
-    const validatedContent = validateContent(content);
-    const validatedKeywords = validateKeywords(keywords);
+  const executor = new GenerationExecutor(factory);
+  return {
+    providerFactory: factory,
+    blogService: new BlogService(executor),
+    socialService: new SocialService(executor),
+    videoScriptService: new VideoScriptService(executor),
+    analysisService: new AnalysisService(executor),
+    seoService: new SeoService(executor),
+    abTestService: new ABTestService(executor),
+    imagePromptService: new ImagePromptService(executor),
+    contentCalendarService: new ContentCalendarService(executor),
+    mediaGenerationService: new MediaGenerationService(factory),
+  };
+};
 
-    const prompt = `
-Calculate SEO score for this content:
+export class AIContentService implements IAIContentService {
+  private readonly providerFactory: ProviderFactory;
+  private readonly blogService: BlogService;
+  private readonly socialService: SocialService;
+  private readonly videoScriptService: VideoScriptService;
+  private readonly analysisService: AnalysisService;
+  private readonly seoService: SeoService;
+  private readonly abTestService: ABTestService;
+  private readonly imagePromptService: ImagePromptService;
+  private readonly contentCalendarService: ContentCalendarService;
+  private readonly mediaGenerationService: MediaGenerationService;
 
-Content: "${validatedContent.substring(0, MAX_CONTENT_PREVIEW_LENGTH)}..."
-Keywords: ${validatedKeywords.join(', ')}
-
-Provide breakdown in JSON:
-{
-  "keywordDensity": 0-100,
-  "readabilityScore": 0-100,
-  "titleOptimization": 0-100,
-  "metaDescription": 0-100,
-  "headingStructure": 0-100,
-  "internalLinking": 0-100,
-  "overall": 0-100
-}
-
-Return only the JSON:
-`;
-
-    const response = await this.generateText(prompt, {
-      maxTokens: 200,
-      temperature: 0.3,
-    });
-
-    const result = parseJSONResponse(response, {
-      keywordDensity: 50,
-      readabilityScore: 50,
-      titleOptimization: 50,
-      metaDescription: 50,
-      headingStructure: 50,
-      internalLinking: 50,
-      overall: 50,
-    });
-
-    // Validate all scores are in 0-100 range
-    result.keywordDensity = clampScore(result.keywordDensity);
-    result.readabilityScore = clampScore(result.readabilityScore);
-    result.titleOptimization = clampScore(result.titleOptimization);
-    result.metaDescription = clampScore(result.metaDescription);
-    result.headingStructure = clampScore(result.headingStructure);
-    result.internalLinking = clampScore(result.internalLinking);
-    result.overall = clampScore(result.overall);
-
-    return result;
+  constructor(configOrApiKey: ProviderConfig | string, model: string = AnthropicDefaults.TEXT_MODEL) {
+    const bundle = buildServices(configOrApiKey, model);
+    this.providerFactory = bundle.providerFactory;
+    this.blogService = bundle.blogService;
+    this.socialService = bundle.socialService;
+    this.videoScriptService = bundle.videoScriptService;
+    this.analysisService = bundle.analysisService;
+    this.seoService = bundle.seoService;
+    this.abTestService = bundle.abTestService;
+    this.imagePromptService = bundle.imagePromptService;
+    this.contentCalendarService = bundle.contentCalendarService;
+    this.mediaGenerationService = bundle.mediaGenerationService;
   }
 
-  /**
-   * Analyze Keywords
-   */
-  async analyzeKeywords(content: string, keywords: string[]): Promise<KeywordAnalysis[]> {
-    // Validate inputs
-    const validatedContent = validateContent(content);
-    const validatedKeywords = validateKeywords(keywords);
-
-    const results: KeywordAnalysis[] = [];
-    const words = validatedContent.split(/\s+/).length;
-
-    for (const keyword of validatedKeywords) {
-      const regex = new RegExp(escapeRegExp(keyword), 'gi');
-      const matches = validatedContent.match(regex) || [];
-      const count = matches.length;
-      const density = (count / words) * 100;
-
-      results.push({
-        keyword,
-        count,
-        density,
-        prominence: density > 2 ? 'high' : density > 1 ? 'medium' : 'low',
-        suggestions: density < 1 ? ['Consider using this keyword more frequently'] : [],
-      });
-    }
-
-    return results;
+  // ---------- Blog ----------
+  generateBlogPost(request: BlogGenerationRequest): Promise<GeneratedBlog> {
+    return this.blogService.generateBlogPost(request);
   }
 
-  /**
-   * Predict A/B Test
-   */
-  async predictABTest(request: ABTestRequest): Promise<ABTestPrediction[]> {
-    const predictions: ABTestPrediction[] = [];
-
-    for (const variant of request.variants) {
-      const prompt = `
-Predict performance for this content variant:
-
-Content: "${variant.content.substring(0, MAX_VARIANT_CONTENT_LENGTH)}"
-Content Type: ${variant.contentType}
-Tone: ${variant.tone}
-Target Audience: ${request.targetAudience}
-Platform: ${request.platform}
-Goals: ${request.goals.join(', ')}
-
-Provide prediction in JSON:
-{
-  "predictedEngagement": 0-100,
-  "predictedCTR": 0-100,
-  "predictedConversions": 0-100,
-  "confidence": 0-1,
-  "reasoning": "...",
-  "strengths": ["strength1", ...],
-  "weaknesses": ["weakness1", ...],
-  "suggestions": ["suggestion1", ...]
-}
-
-Return only the JSON:
-`;
-
-      const response = await this.generateText(prompt, {
-        maxTokens: 300,
-        temperature: 0.5,
-      });
-
-      const parsed = parseJSONResponse(response, {
-        predictedEngagement: 0,
-        predictedCTR: 0,
-        predictedConversions: 0,
-        confidence: 0,
-        reasoning: '',
-        strengths: [],
-        weaknesses: [],
-        suggestions: [],
-      });
-
-      // Validate score ranges
-      parsed.predictedEngagement = clampScore(parsed.predictedEngagement);
-      parsed.predictedCTR = clampScore(parsed.predictedCTR);
-      parsed.predictedConversions = clampScore(parsed.predictedConversions);
-      parsed.confidence = clampConfidence(parsed.confidence);
-
-      predictions.push({
-        variantId: variant.id,
-        ...parsed,
-      });
-    }
-
-    return predictions;
+  // ---------- Social ----------
+  generateSocialContent(request: SocialContentRequest): Promise<GeneratedSocialContent> {
+    return this.socialService.generateSocialContent(request);
+  }
+  generateForAllPlatforms(topic: string, tone: ContentTone): Promise<GeneratedSocialContent[]> {
+    return this.socialService.generateForAllPlatforms(topic, tone);
+  }
+  generateHashtags(content: string, count: number): Promise<string[]> {
+    return this.socialService.generateHashtags(content, count);
+  }
+  optimizeHashtags(hashtags: string[], platform: SocialPlatform): Promise<string[]> {
+    return Promise.resolve(this.socialService.optimizeHashtags(hashtags, platform));
   }
 
-  /**
-   * Compare Variants
-   */
-  async compareVariants(variantA: string, variantB: string): Promise<ABTestComparison> {
-    const predictions = await this.predictABTest({
-      variants: [
-        { id: 'A', content: variantA, contentType: 'social', tone: 'casual' },
-        { id: 'B', content: variantB, contentType: 'social', tone: 'casual' },
-      ],
-      targetAudience: 'general',
-      platform: 'twitter',
-      goals: ['engagement', 'clicks'],
-    });
-
-    const scoreA = predictions[0]?.predictedEngagement || 50;
-    const scoreB = predictions[1]?.predictedEngagement || 50;
-    const winner = scoreA > scoreB ? 'A' : 'B';
-    const minScore = Math.min(scoreA, scoreB);
-    const improvement = minScore > 0
-      ? Math.abs((Math.max(scoreA, scoreB) / minScore - 1) * 100).toFixed(0)
-      : '100';
-
-    return {
-      winner,
-      confidence: 0.7,
-      improvement: `+${improvement}% engagement`,
-      reasoning: winner === 'A' ? 'Variant A has more engaging content' : 'Variant B has more engaging content',
-      recommendations: ['Test with larger audience', 'Monitor click-through rates'],
-    };
+  // ---------- Video Script ----------
+  generateVideoScript(request: VideoScriptRequest): Promise<GeneratedVideoScript> {
+    return this.videoScriptService.generateVideoScript(request);
+  }
+  generateVoiceScript(topic: string, emotion: Emotion, duration: number): Promise<GeneratedVideoScript> {
+    return this.videoScriptService.generateVoiceScript(topic, emotion, duration);
   }
 
-  /**
-   * Generate Hashtags
-   */
-  async generateHashtags(content: string, count: number): Promise<string[]> {
-    // Validate inputs
-    const validatedContent = validateContent(content);
-    const validatedCount = validateHashtagCount(count);
-
-    const prompt = `
-Generate ${validatedCount} relevant hashtags for this content:
-
-"${validatedContent}"
-
-Requirements:
-- Mix of popular and niche hashtags
-- Industry-specific when possible
-- Trending if relevant
-- No duplicated words
-- Format: #hashtag (one per line)
-
-Return only the hashtags:
-`;
-
-    const response = await this.generateText(prompt, {
-      maxTokens: 200,
-      temperature: 0.7,
-    });
-
-    const hashtags = response.match(/#[\w-]+/g) || [];
-    return hashtags.slice(0, validatedCount);
+  // ---------- Content Calendar ----------
+  generateContentCalendar(niche: string, days: number): Promise<ContentCalendarEntry[]> {
+    return this.contentCalendarService.generateContentCalendar(niche, days);
   }
 
-  /**
-   * Optimize Hashtags
-   */
-  async optimizeHashtags(hashtags: string[], platform: SocialPlatform): Promise<string[]> {
-    const maxHashtags = PLATFORM_SPECS[platform].maxHashtags;
-
-    if (hashtags.length <= maxHashtags) {
-      return hashtags;
-    }
-
-    // Simple strategy: keep hashtags that are more specific (longer)
-    return hashtags
-      .sort((a, b) => b.length - a.length)
-      .slice(0, maxHashtags);
+  // ---------- Analysis ----------
+  analyzeSentiment(content: string): Promise<SentimentAnalysisResult> {
+    return this.analysisService.analyzeSentiment(content);
+  }
+  analyzeContent(request: ContentAnalysisRequest): Promise<ContentAnalysisResult> {
+    return this.analysisService.analyzeContent(request);
   }
 
-  /**
-   * Generate Image Prompt
-   */
-  async generateImagePrompt(description: string, style: string): Promise<string> {
-    // Validate inputs
-    const validatedDescription = validateTopic(description);
-
-    const prompt = `
-Generate a detailed AI image generation prompt for:
-
-Description: ${validatedDescription}
-Style: ${style || 'realistic'}
-
-Create a detailed, descriptive prompt that includes:
-- Subject details
-- Mood and atmosphere
-- Lighting
-- Composition
-- Art style reference
-- Technical specifications (aspect ratio, quality)
-
-The prompt should be optimized for models like Midjourney, DALL-E, or Stable Diffusion.
-
-Generate the prompt:
-`;
-
-    return this.generateText(prompt, {
-      maxTokens: 300,
-      temperature: 0.8,
-    });
+  // ---------- SEO ----------
+  optimizeSEO(request: SEOOptimizationRequest): Promise<SEOOptimizationResult> {
+    return this.seoService.optimizeSEO(request);
+  }
+  calculateSEOScore(content: string, keywords: string[]): Promise<SEOScoreBreakdown> {
+    return this.seoService.calculateSEOScore(content, keywords);
+  }
+  analyzeKeywords(content: string, keywords: string[]): Promise<KeywordAnalysis[]> {
+    return Promise.resolve(this.seoService.analyzeKeywords(content, keywords));
   }
 
-  /**
-   * Generate Image Prompts for Blog
-   */
-  async generateImagePromptsForBlog(blogContent: string): Promise<string[]> {
-    // Validate inputs
-    const validatedContent = validateContent(blogContent);
-
-    const prompt = `
-Analyze this blog content and generate 3-5 detailed image prompts for illustrative images:
-
-Blog Content: "${validatedContent.substring(0, MAX_BLOG_CONTENT_PREVIEW_LENGTH)}..."
-
-For each image prompt, provide:
-- Subject description
-- Mood and atmosphere
-- Style reference
-- Composition details
-- Technical specs
-
-Return as JSON array:
-["prompt1", "prompt2", "prompt3", ...]
-
-Return only the JSON:
-`;
-
-    const response = await this.generateText(prompt, {
-      maxTokens: 500,
-      temperature: 0.8,
-    });
-
-    const jsonMatch = response.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      try {
-        return JSON.parse(jsonMatch[0]);
-      } catch (error) {
-        // Return empty array on parse error
-      }
-    }
-
-    return [];
+  // ---------- A/B Testing ----------
+  predictABTest(request: ABTestRequest): Promise<ABTestPrediction[]> {
+    return this.abTestService.predictABTest(request);
+  }
+  compareVariants(variantA: string, variantB: string): Promise<ABTestComparison> {
+    return this.abTestService.compareVariants(variantA, variantB);
   }
 
-  /**
-   * Generate Voice Script with Emotion
-   */
-  async generateVoiceScript(
-    topic: string,
-    emotion: Emotion,
-    duration: number
-  ): Promise<GeneratedVideoScript> {
-    // Validate inputs
-    const validatedTopic = validateTopic(topic);
-    const validatedDuration = validateDuration(duration);
-
-    const prompt = `
-Create a ${emotion} voice script about: ${validatedTopic}
-
-Duration: ${validatedDuration} seconds
-Emotion: ${emotion}
-
-The script should:
-- Evoke the specified emotion
-- Be suitable for voice recording with emotion control
-- Include natural speech patterns
-- Have appropriate pacing for the emotion
-- Include emotional cues in brackets where needed
-
-Approximate word count: ${Math.floor(validatedDuration * WORDS_PER_SECOND)} words
-
-Generate in JSON format:
-{
-  "script": "Full script with emotional cues",
-  "visualCues": ["Visual cue 1", "Visual cue 2"],
-  "estimatedEngagement": 0-100
-}
-`;
-
-    const response = await this.generateText(prompt, {
-      maxTokens: validatedDuration * TOKENS_PER_SECOND,
-      temperature: 0.8,
-    });
-
-    try {
-      const parsed = JSON.parse(response);
-      if (!parsed.script) {
-        throw new Error('AI response missing script field');
-      }
-      return {
-        ...parsed,
-        duration: validatedDuration,
-        wordCount: parsed.script.split(' ').length,
-      };
-    } catch (error) {
-      throw new Error(`Failed to parse AI response: ${error}`);
-    }
+  // ---------- Image Prompts ----------
+  generateImagePrompt(description: string, style: string): Promise<string> {
+    return this.imagePromptService.generateImagePrompt(description, style);
+  }
+  generateImagePromptsForBlog(blogContent: string): Promise<string[]> {
+    return this.imagePromptService.generateImagePromptsForBlog(blogContent);
   }
 
-  /**
-   * Generate Image using multi-provider system
-   */
-  async generateImage(request: ImageGenerationRequest): Promise<GeneratedContent> {
-    if (!this.providerFactory) {
-      throw new Error('Provider factory not initialized. Please provide ProviderConfig to constructor.');
-    }
-
-    try {
-      return await this.providerFactory.generateImage(request);
-    } catch (error) {
-      throw new Error(`Image generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+  // ---------- Provider-backed media ----------
+  generateImage(request: ImageGenerationRequest): Promise<GeneratedContent> {
+    return this.mediaGenerationService.generateImage(request);
   }
-
-  /**
-   * Generate Video using multi-provider system
-   */
-  async generateVideo(request: VideoGenerationRequest): Promise<GeneratedContent> {
-    if (!this.providerFactory) {
-      throw new Error('Provider factory not initialized. Please provide ProviderConfig to constructor.');
-    }
-
-    try {
-      return await this.providerFactory.generateVideo(request);
-    } catch (error) {
-      throw new Error(`Video generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+  generateVideo(request: VideoGenerationRequest): Promise<GeneratedContent> {
+    return this.mediaGenerationService.generateVideo(request);
   }
-
-  /**
-   * Convert Image to Video using multi-provider system
-   */
-  async convertImageToVideo(request: ImageToVideoRequest): Promise<GeneratedContent> {
-    if (!this.providerFactory) {
-      throw new Error('Provider factory not initialized. Please provide ProviderConfig to constructor.');
-    }
-
-    try {
-      return await this.providerFactory.imageToVideo(request);
-    } catch (error) {
-      throw new Error(`Image-to-video conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+  convertImageToVideo(request: ImageToVideoRequest): Promise<GeneratedContent> {
+    return this.mediaGenerationService.convertImageToVideo(request);
   }
-
-  /**
-   * Transform Video (video-to-video) using multi-provider system
-   */
-  async transformVideo(request: VideoToVideoRequest): Promise<GeneratedContent> {
-    if (!this.providerFactory) {
-      throw new Error('Provider factory not initialized. Please provide ProviderConfig to constructor.');
-    }
-
-    try {
-      return await this.providerFactory.videoToVideo(request);
-    } catch (error) {
-      throw new Error(`Video-to-video transformation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+  transformVideo(request: VideoToVideoRequest): Promise<GeneratedContent> {
+    return this.mediaGenerationService.transformVideo(request);
   }
 }
+
+// Re-export IAIProvider for backwards compatibility (now lives in infrastructure)
+export type { IAIProvider } from '../../infrastructure/providers/base.provider';
