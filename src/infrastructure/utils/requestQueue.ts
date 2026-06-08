@@ -3,6 +3,8 @@
  * Manages AI provider requests with concurrency control and rate limiting
  */
 
+import { RequestQueueConfig } from '../../domain/limits/RequestQueueConfig';
+
 /**
  * Priority levels for requests
  */
@@ -44,13 +46,13 @@ export interface QueueConfig {
  * Default queue configuration
  */
 const DEFAULT_CONFIG: QueueConfig = {
-  maxConcurrent: 3,
-  maxQueueSize: 50,
-  defaultTimeout: 30000,
-  retryDelay: 1000,
-  enableRateLimit: true,
-  rateLimitWindow: 60000, // 1 minute
-  rateLimitMaxRequests: 100,
+  maxConcurrent: RequestQueueConfig.MAX_CONCURRENT,
+  maxQueueSize: RequestQueueConfig.MAX_QUEUE_SIZE,
+  defaultTimeout: RequestQueueConfig.DEFAULT_TIMEOUT_MS,
+  retryDelay: RequestQueueConfig.RETRY_DELAY_MS,
+  enableRateLimit: RequestQueueConfig.RATE_LIMIT.ENABLED,
+  rateLimitWindow: RequestQueueConfig.RATE_LIMIT.WINDOW_MS,
+  rateLimitMaxRequests: RequestQueueConfig.RATE_LIMIT.MAX_REQUESTS_PER_WINDOW,
 };
 
 /**
@@ -142,7 +144,7 @@ export class RequestQueue {
       }
 
       // Wait a bit before checking again
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, RequestQueueConfig.POLL_INTERVAL_MS));
     }
 
     this.isProcessing = false;
@@ -201,23 +203,22 @@ export class RequestQueue {
     promise: Promise<T>,
     timeout: number
   ): Promise<T> {
+    // Race the promise against a timer; the controller exists so callers
+    // can opt into abort-based cancellation by passing the signal through.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        controller.abort();
+        reject(new Error('Request timeout'));
+      }, timeout);
+    });
 
     try {
-      // Note: This won't actually cancel the underlying fetch unless it uses AbortController
-      const result = await Promise.race([
-        promise,
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Request timeout')), timeout)
-        ),
-      ]);
-
-      clearTimeout(timeoutId);
+      const result = await Promise.race([promise, timeoutPromise]);
       return result;
-    } catch (error) {
-      clearTimeout(timeoutId);
-      throw error;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
   }
 
@@ -257,7 +258,7 @@ export class RequestQueue {
    */
   async drain(): Promise<void> {
     while (this.running.size > 0) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, RequestQueueConfig.POLL_INTERVAL_MS));
     }
   }
 }
@@ -341,13 +342,11 @@ export function debounceRequest<T extends (...args: unknown[]) => unknown>(
   delay: number
 ): (...args: Parameters<T>) => Promise<ReturnType<T>> {
   let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  let pendingResolve: ((value: ReturnType<T>) => void) | null = null;
   let pendingArgs: Parameters<T> | null = null;
 
   return (...args: Parameters<T>): Promise<ReturnType<T>> => {
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
       pendingArgs = args;
-      pendingResolve = resolve as (value: ReturnType<T>) => void;
 
       if (timeoutId) {
         clearTimeout(timeoutId);
@@ -355,14 +354,12 @@ export function debounceRequest<T extends (...args: unknown[]) => unknown>(
 
       timeoutId = setTimeout(async () => {
         try {
-          const result = await fn(...(pendingArgs!));
-          pendingResolve?.(result);
+          const result = await fn(...(pendingArgs as Parameters<T>));
+          resolve(result);
         } catch (error) {
-          // Error will be thrown when pendingResolve is called
-          throw error;
+          reject(error instanceof Error ? error : new Error(String(error)));
         } finally {
           timeoutId = null;
-          pendingResolve = null;
           pendingArgs = null;
         }
       }, delay);
@@ -378,18 +375,20 @@ export function throttleRequest<T extends (...args: unknown[]) => unknown>(
   interval: number
 ): (...args: Parameters<T>) => Promise<ReturnType<T>> {
   let lastCall = 0;
-  let pendingResolve: ((value: ReturnType<T>) => void) | null = null;
   let pendingArgs: Parameters<T> | null = null;
 
   return (...args: Parameters<T>): Promise<ReturnType<T>> => {
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
       pendingArgs = args;
+      pendingResolve = resolve as (value: ReturnType<T>) => void;
 
       const execute = async () => {
         lastCall = Date.now();
         try {
-          const result = await fn(...(pendingArgs!));
+          const result = await fn(...(pendingArgs as Parameters<T>));
           resolve(result);
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error(String(error)));
         } finally {
           pendingResolve = null;
           pendingArgs = null;

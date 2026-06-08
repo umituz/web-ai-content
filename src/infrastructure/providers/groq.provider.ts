@@ -4,25 +4,70 @@
  */
 
 import { BaseAIProvider, type GeneratedContent } from './base.provider';
+import { ProviderTimingConfig } from '../../domain/limits/ProviderTimingConfig';
+import { ModelDefaults } from '../../domain/limits/ModelDefaults';
+import { estimateGroqGenerationCost } from '../../domain/predicates/ProviderCostEstimator';
 import type { GroqConfig, TextGenerationRequest, ImageGenerationRequest, VideoGenerationRequest, ImageToVideoRequest, VideoToVideoRequest } from '../../domain/config/ProviderConfig';
 
-// Lazy import from @umituz/web-ai-groq-provider to avoid build issues
-// This allows web-ai-content to work without requiring groq-provider as a dependency
-let textGenerationService: any = null;
-let groqHttpClient: any = null;
+interface GroqTextService {
+  generateCompletion: (prompt: string, options: GroqGenerationOptions) => Promise<string>;
+  generateStructured: <T = Record<string, unknown>>(
+    prompt: string,
+    options: GroqGenerationOptions,
+  ) => Promise<T>;
+  streamCompletion: (
+    prompt: string,
+    callbacks: { onChunk: (chunk: string) => void; onComplete: (full: string) => void },
+    options: GroqGenerationOptions,
+  ) => Promise<void>;
+}
 
-async function initializeGroqServices() {
-  if (!textGenerationService) {
-    try {
-      // @ts-ignore - @umituz/web-ai-groq-provider is a peer dependency
-      const module = await import('@umituz/web-ai-groq-provider');
-      textGenerationService = module.textGenerationService;
-      groqHttpClient = module.groqHttpClient;
-    } catch (error) {
-      console.warn('@umituz/web-ai-groq-provider not available. Groq text generation will be disabled.');
-      throw new Error('@umituz/web-ai-groq-provider is required for Groq text generation. Please install it: npm install @umituz/web-ai-groq-provider');
-    }
+interface GroqHttpClient {
+  initialize?: (config: GroqConfig) => void;
+  isInitialized?: () => boolean;
+}
+
+interface GroqGenerationOptions {
+  model?: string;
+  generationConfig?: {
+    temperature?: number;
+    maxTokens?: number;
+    topP?: number;
+  };
+  schema?: Record<string, unknown>;
+}
+
+interface GroqModule {
+  textGenerationService: GroqTextService;
+  groqHttpClient: GroqHttpClient;
+}
+
+let textGenerationService: GroqTextService | null = null;
+let groqHttpClient: GroqHttpClient | null = null;
+
+async function initializeGroqServices(): Promise<void> {
+  if (textGenerationService && groqHttpClient) return;
+  try {
+    const module = (await import('@umituz/web-ai-groq-provider')) as unknown as GroqModule;
+    textGenerationService = module.textGenerationService;
+    groqHttpClient = module.groqHttpClient;
+  } catch {
+    console.warn('@umituz/web-ai-groq-provider not available. Groq text generation will be disabled.');
+    throw new Error('@umituz/web-ai-groq-provider is required for Groq text generation. Please install it: npm install @umituz/web-ai-groq-provider');
   }
+}
+
+function ensureHttpClient(config: GroqConfig): void {
+  if (groqHttpClient && !groqHttpClient.isInitialized?.()) {
+    groqHttpClient.initialize?.(config);
+  }
+}
+
+function requireTextService(): GroqTextService {
+  if (!textGenerationService) {
+    throw new Error('Groq text generation service not available. Please install @umituz/web-ai-groq-provider');
+  }
+  return textGenerationService;
 }
 
 /**
@@ -34,15 +79,15 @@ export class GroqProvider extends BaseAIProvider {
   readonly name = 'Groq';
   readonly type = 'text' as const;
 
-  private defaultModel = 'llama-3.1-8b-instant';
+  private defaultModel: string = ModelDefaults.GROQ_TEXT;
   private groqConfig: GroqConfig | null = null;
 
   constructor(config: GroqConfig) {
     super({
       apiKey: config.apiKey,
       baseUrl: config.baseUrl || 'https://api.groq.com/openai/v1',
-      timeout: config.timeout || 30000,
-      retryAttempts: config.retryAttempts || 3,
+      timeout: config.timeout || ProviderTimingConfig.GROQ_TIMEOUT_MS,
+      retryAttempts: config.retryAttempts || ProviderTimingConfig.GROQ_RETRY_ATTEMPTS,
     });
     this.defaultModel = config.models?.text || this.defaultModel;
     this.groqConfig = config;
@@ -63,11 +108,7 @@ export class GroqProvider extends BaseAIProvider {
       }
 
       await initializeGroqServices();
-
-      // Use groqHttpClient if available
-      if (groqHttpClient && !groqHttpClient.isInitialized()) {
-        groqHttpClient.initialize(this.groqConfig!);
-      }
+      ensureHttpClient(this.groqConfig!);
 
       // Simple health check - try to list models
       const response = await this.fetchWithTimeout(
@@ -91,28 +132,18 @@ export class GroqProvider extends BaseAIProvider {
    * Estimate cost for Groq (they offer free tier)
    */
   async estimateCost(_request?: TextGenerationRequest | ImageGenerationRequest | VideoGenerationRequest): Promise<number> {
-    // Groq offers free tier, so cost is 0
-    return 0;
+    return estimateGroqGenerationCost(_request);
   }
 
   /**
    * Generate text using Groq API via @umituz/web-ai-groq-provider
    */
   async generateText(request: TextGenerationRequest): Promise<GeneratedContent> {
-    await initializeGroqServices();
-
-    if (!textGenerationService) {
-      throw new Error('Groq text generation service not available. Please install @umituz/web-ai-groq-provider');
-    }
-
-    // Initialize HTTP client if needed
-    if (groqHttpClient && !groqHttpClient.isInitialized()) {
-      groqHttpClient.initialize(this.groqConfig!);
-    }
-
     try {
-      // Use textGenerationService from @umituz/web-ai-groq-provider
-      const content = await textGenerationService.generateCompletion(request.prompt, {
+      await initializeGroqServices();
+      ensureHttpClient(this.groqConfig!);
+
+      const content = await requireTextService().generateCompletion(request.prompt, {
         model: request.model || this.defaultModel,
         generationConfig: {
           temperature: request.temperature,
@@ -142,20 +173,11 @@ export class GroqProvider extends BaseAIProvider {
   async generateStructuredJSON<T = Record<string, unknown>>(
     request: TextGenerationRequest & { schema?: Record<string, unknown> }
   ): Promise<T> {
-    await initializeGroqServices();
-
-    if (!textGenerationService) {
-      throw new Error('Groq text generation service not available. Please install @umituz/web-ai-groq-provider');
-    }
-
-    // Initialize HTTP client if needed
-    if (groqHttpClient && !groqHttpClient.isInitialized()) {
-      groqHttpClient.initialize(this.groqConfig!);
-    }
-
     try {
-      // @ts-ignore - dynamic import
-      const result = await textGenerationService.generateStructured<T>(request.prompt, {
+      await initializeGroqServices();
+      ensureHttpClient(this.groqConfig!);
+
+      return await requireTextService().generateStructured<T>(request.prompt, {
         model: request.model || this.defaultModel,
         generationConfig: {
           temperature: 0.1, // Lower temperature for JSON
@@ -163,8 +185,6 @@ export class GroqProvider extends BaseAIProvider {
         },
         schema: request.schema,
       });
-
-      return result;
     } catch (error) {
       throw new Error(`Groq structured generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -178,24 +198,13 @@ export class GroqProvider extends BaseAIProvider {
     onChunk: (chunk: string) => void,
     onComplete: (fullText: string) => void
   ): Promise<void> {
-    await initializeGroqServices();
-
-    if (!textGenerationService) {
-      throw new Error('Groq text generation service not available. Please install @umituz/web-ai-groq-provider');
-    }
-
-    // Initialize HTTP client if needed
-    if (groqHttpClient && !groqHttpClient.isInitialized()) {
-      groqHttpClient.initialize(this.groqConfig!);
-    }
-
     try {
-      await textGenerationService.streamCompletion(
+      await initializeGroqServices();
+      ensureHttpClient(this.groqConfig!);
+
+      await requireTextService().streamCompletion(
         request.prompt,
-        {
-          onChunk,
-          onComplete,
-        },
+        { onChunk, onComplete },
         {
           model: request.model || this.defaultModel,
           generationConfig: {
@@ -203,7 +212,7 @@ export class GroqProvider extends BaseAIProvider {
             maxTokens: request.maxTokens,
             topP: request.topP,
           },
-        }
+        },
       );
     } catch (error) {
       throw new Error(`Groq streaming failed: ${error instanceof Error ? error.message : 'Unknown error'}`);

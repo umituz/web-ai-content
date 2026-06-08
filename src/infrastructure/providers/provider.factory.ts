@@ -1,24 +1,33 @@
 /**
  * Provider Factory
- * Manages AI provider registration, selection, and fallback logic
+ * Manages AI provider registration, selection, and fallback logic.
+ * Implements ITextGenerator so it can be plugged into the service layer
+ * alongside single-backend strategies.
  */
 
 import type {
   ProviderConfig,
   ProviderHealth,
   ProviderType,
-  TextGenerationRequest,
   ImageGenerationRequest,
   VideoGenerationRequest,
   ImageToVideoRequest,
   VideoToVideoRequest,
   GeneratedContent,
 } from '../../domain/config/ProviderConfig';
+import type {
+  ITextGenerator,
+  TextGenerationOptions,
+} from '../../domain/interfaces/ITextGenerator';
+import { ProviderTimingConfig } from '../../domain/limits/ProviderTimingConfig';
 
 // Re-export types for convenience
 export type { ProviderConfig, ProviderHealth, ProviderType };
-import { ProviderUnavailableError } from './base.provider';
+import { ProviderError as ProviderErrorBase } from './base.provider';
 import type { IAIProvider } from './base.provider';
+
+// Local alias retained for backwards-compatible error class names.
+const ProviderUnavailableInfraError = ProviderErrorBase;
 
 /**
  * Health check cache entry with TTL
@@ -29,15 +38,12 @@ interface HealthCheckCache {
 }
 
 /**
- * Default health check TTL (5 minutes)
- */
-const DEFAULT_HEALTH_CHECK_TTL = 5 * 60 * 1000;
-
-/**
  * Provider Factory
- * Manages multiple AI providers with automatic fallback
+ * Manages multiple AI providers with automatic fallback.
+ * Implements ITextGenerator so it can drive text-only service flows
+ * by selecting a text-capable provider and falling back on errors.
  */
-export class ProviderFactory {
+export class ProviderFactory implements ITextGenerator {
   private providers: Map<string, IAIProvider> = new Map();
   private config: ProviderConfig;
   private healthCache: Map<string, HealthCheckCache> = new Map();
@@ -45,7 +51,7 @@ export class ProviderFactory {
 
   constructor(config: ProviderConfig, healthCheckTTL?: number) {
     this.config = config;
-    this.healthCheckTTL = healthCheckTTL || DEFAULT_HEALTH_CHECK_TTL;
+    this.healthCheckTTL = healthCheckTTL || ProviderTimingConfig.HEALTH_CHECK_TTL_MS;
   }
 
   /**
@@ -88,7 +94,7 @@ export class ProviderFactory {
     const providers = this.getProvidersByType(type);
 
     if (providers.length === 0) {
-      throw new ProviderUnavailableError(`No provider available for type: ${type}`);
+      throw new ProviderUnavailableInfraError('factory', `No provider available for type: ${type}`);
     }
 
     // Try providers in priority order
@@ -107,7 +113,7 @@ export class ProviderFactory {
     }
 
     // All providers exhausted/unavailable
-    throw new ProviderUnavailableError(`All providers unavailable for type: ${type}`);
+    throw new ProviderUnavailableInfraError('factory', `All providers unavailable for type: ${type}`);
   }
 
   /**
@@ -192,7 +198,7 @@ export class ProviderFactory {
     const providers = this.getProvidersByType(requestType);
 
     if (providers.length === 0) {
-      throw new ProviderUnavailableError(`No provider available for type: ${requestType}`);
+      throw new ProviderUnavailableInfraError('factory', `No provider available for type: ${requestType}`);
     }
 
     // Try in priority order
@@ -241,14 +247,7 @@ export class ProviderFactory {
       }
     }
 
-    throw new ProviderUnavailableError(`All providers failed for type: ${requestType}`);
-  }
-
-  /**
-   * Generate text with automatic fallback
-   */
-  async generateText(request: TextGenerationRequest): Promise<GeneratedContent> {
-    return this.executeWithFallback('text', provider => provider.generateText(request));
+    throw new ProviderUnavailableInfraError('factory', `All providers failed for type: ${requestType}`);
   }
 
   /**
@@ -277,6 +276,34 @@ export class ProviderFactory {
    */
   async videoToVideo(request: VideoToVideoRequest): Promise<GeneratedContent> {
     return this.executeWithFallback('video', provider => provider.videoToVideo(request));
+  }
+
+  /**
+   * ITextGenerator implementation: pick the best healthy text provider and
+   * delegate the call. Surfaces provider errors as-is.
+   */
+  async generateText(prompt: string, options: TextGenerationOptions = {}): Promise<string> {
+    const provider = this.getTextProvider();
+    const result = await provider.generateText({
+      type: 'text',
+      prompt,
+      model: options.model,
+      maxTokens: options.maxTokens,
+      temperature: options.temperature,
+      topP: options.topP,
+    });
+    if (typeof result.content === 'string') {
+      return result.content;
+    }
+    throw new Error(`Provider ${provider.id} returned no text content`);
+  }
+
+  async *generateTextStream(
+    prompt: string,
+    options: TextGenerationOptions = {},
+  ): AsyncGenerator<string> {
+    const text = await this.generateText(prompt, options);
+    yield text;
   }
 }
 

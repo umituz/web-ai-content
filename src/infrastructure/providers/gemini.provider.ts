@@ -4,6 +4,9 @@
  */
 
 import { BaseAIProvider, type GeneratedContent } from './base.provider';
+import { ProviderTimingConfig } from '../../domain/limits/ProviderTimingConfig';
+import { estimateGeminiGenerationCost } from '../../domain/predicates/ProviderCostEstimator';
+import { ModelDefaults } from '../../domain/limits/ModelDefaults';
 import type { GeminiConfig, TextGenerationRequest, ImageGenerationRequest, VideoGenerationRequest, ImageToVideoRequest, VideoToVideoRequest } from '../../domain/config/ProviderConfig';
 
 /**
@@ -37,17 +40,17 @@ export class GeminiProvider extends BaseAIProvider {
   readonly name = 'Google Gemini';
   readonly type = 'multimodal' as const;
 
-  private models = {
-    text: 'gemini-2.0-flash',
-    image: 'imagen-4.0-generate-001',
+  private models: { text: string; image: string; video?: string } = {
+    text: ModelDefaults.GEMINI_TEXT,
+    image: ModelDefaults.GEMINI_IMAGE,
   };
 
   constructor(config: GeminiConfig) {
     super({
       apiKey: config.apiKey,
       baseUrl: config.baseUrl || 'https://generativelanguage.googleapis.com/v1beta',
-      timeout: config.timeout || 60000,
-      retryAttempts: config.retryAttempts || 3,
+      timeout: config.timeout || ProviderTimingConfig.GEMINI_TIMEOUT_MS,
+      retryAttempts: config.retryAttempts || ProviderTimingConfig.GEMINI_RETRY_ATTEMPTS,
     });
 
     if (config.models) {
@@ -90,12 +93,7 @@ export class GeminiProvider extends BaseAIProvider {
    * Estimate cost for Gemini (uses Google AI pricing)
    */
   async estimateCost(request: TextGenerationRequest | ImageGenerationRequest): Promise<number> {
-    // Gemini pricing is complex, return estimated cost
-    // This is a simplified estimation
-    if (request.type === 'image') {
-      return 0.02; // ~$0.02 per image
-    }
-    return 0.0001; // ~$0.0001 per 1K characters
+    return estimateGeminiGenerationCost(request);
   }
 
   /**
