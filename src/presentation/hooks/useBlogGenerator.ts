@@ -1,52 +1,53 @@
-import { useState, useCallback, useMemo } from 'react';
-import { AIContentService } from '../../application/services/AIContentService';
-import type { BlogGenerationRequest, GeneratedBlog } from '../../domain/entities/ContentGeneration';
+/**
+ * useBlogGenerator
+ * Specialized hook for blog post generation.
+ * Delegates to the AIContentService through the shared useAIContentContext.
+ */
 
-interface UseBlogGeneratorOptions {
+import { useCallback, useState } from 'react';
+import type { BlogGenerationRequest, GeneratedBlog } from '../../domain/entities/ContentGeneration';
+import { useAIContentContext } from './internal/useAIContentContext';
+
+export interface UseBlogGeneratorOptions {
   apiKey: string;
   model?: string;
 }
 
-interface UseBlogGeneratorReturn {
-  // State
+export interface UseBlogGeneratorReturn {
   isGenerating: boolean;
   generatedBlog: GeneratedBlog | null;
   error: string | null;
-
-  // Actions
   generateBlog: (request: BlogGenerationRequest) => Promise<void>;
   reset: () => void;
 }
 
 export function useBlogGenerator(options: UseBlogGeneratorOptions): UseBlogGeneratorReturn {
-  const [isGenerating, setIsGenerating] = useState(false);
+  const { service, ctx } = useAIContentContext({
+    apiKey: options.apiKey,
+    model: options.model,
+  });
   const [generatedBlog, setGeneratedBlog] = useState<GeneratedBlog | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  const service = useMemo(() => new AIContentService(options.apiKey, options.model), [options.apiKey, options.model]);
-
-  const generateBlog = useCallback(async (request: BlogGenerationRequest) => {
-    setIsGenerating(true);
-    setError(null);
-    try {
-      const result = await service.generateBlogPost(request);
-      setGeneratedBlog(result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate blog post');
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [service]);
+  const generateBlog = useCallback(
+    async (request: BlogGenerationRequest) => {
+      const result = await ctx.execute(
+        () => service.generateBlogPost(request),
+        'Failed to generate blog post',
+      );
+      if (result) setGeneratedBlog(result);
+    },
+    [ctx, service],
+  );
 
   const reset = useCallback(() => {
     setGeneratedBlog(null);
-    setError(null);
-  }, []);
+    ctx.setError(null);
+  }, [ctx]);
 
   return {
-    isGenerating,
+    isGenerating: ctx.isLoading,
     generatedBlog,
-    error,
+    error: ctx.error,
     generateBlog,
     reset,
   };

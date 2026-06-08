@@ -1,5 +1,12 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
-import { AIContentService } from '../../application/services/AIContentService';
+/**
+ * useAIContent
+ * Top-level React hook for AI content generation.
+ * Composes useAIContentContext (state + service) with thin action callbacks
+ * that delegate to the AIContentService facade. This keeps the hook
+ * declarative: action name, signature, and a single-line delegation.
+ */
+
+import { useCallback, useMemo } from 'react';
 import type {
   BlogGenerationRequest,
   GeneratedBlog,
@@ -26,412 +33,193 @@ import type {
 } from '../../domain/entities/ABTesting';
 import type { ContentTone, Emotion } from '../../domain/types';
 import type { ProviderConfig } from '../../domain/config/ProviderConfig';
-import type { ImageGenerationRequest, VideoGenerationRequest, ImageToVideoRequest, VideoToVideoRequest, GeneratedContent } from '../../domain/config/ProviderConfig';
+import type {
+  ImageGenerationRequest,
+  VideoGenerationRequest,
+  ImageToVideoRequest,
+  VideoToVideoRequest,
+  GeneratedContent,
+} from '../../domain/config/ProviderConfig';
+import type { AIErrorCode } from '../../domain/errors/AIErrors';
+import { useAIContentContext, type AIOptionCallbacks } from './internal/useAIContentContext';
 
-interface UseAIContentOptions {
+export interface UseAIContentOptions {
   providers?: ProviderConfig;
-  apiKey?: string; // Deprecated: Use providers instead
+  apiKey?: string;
   model?: string;
   onError?: (error: Error) => void;
   onProgress?: (progress: number) => void;
 }
 
-interface UseAIContentReturn {
-  // State
+export interface UseAIContentReturn {
   isLoading: boolean;
   progress: number;
   error: string | null;
+  errorCode: AIErrorCode | null;
 
-  // Blog Generation
   generateBlogPost: (request: BlogGenerationRequest) => Promise<GeneratedBlog | null>;
-
-  // Social Content
   generateSocialContent: (request: SocialContentRequest) => Promise<GeneratedSocialContent | null>;
   generateForAllPlatforms: (topic: string, tone: ContentTone) => Promise<GeneratedSocialContent[]>;
-
-  // Video Scripts
   generateVideoScript: (request: VideoScriptRequest) => Promise<GeneratedVideoScript | null>;
-
-  // Content Calendar
   generateContentCalendar: (niche: string, days: number) => Promise<ContentCalendarEntry[]>;
 
-  // Analysis
   analyzeSentiment: (content: string) => Promise<SentimentAnalysisResult | null>;
   analyzeContent: (request: ContentAnalysisRequest) => Promise<ContentAnalysisResult | null>;
 
-  // SEO
   optimizeSEO: (request: SEOOptimizationRequest) => Promise<SEOOptimizationResult | null>;
   calculateSEOScore: (content: string, keywords: string[]) => Promise<SEOScoreBreakdown | null>;
 
-  // A/B Testing
   predictABTest: (request: ABTestRequest) => Promise<ABTestPrediction[]>;
   compareVariants: (variantA: string, variantB: string) => Promise<ABTestComparison | null>;
 
-  // Hashtags
   generateHashtags: (content: string, count: number) => Promise<string[]>;
-
-  // Image Prompts
   generateImagePrompt: (description: string, style: string) => Promise<string | null>;
-
-  // Voice Content
   generateVoiceScript: (topic: string, emotion: Emotion, duration: number) => Promise<GeneratedVideoScript | null>;
 
-  // NEW: Image Generation
   generateImage: (request: ImageGenerationRequest) => Promise<GeneratedContent | null>;
-
-  // NEW: Video Generation
   generateVideo: (request: VideoGenerationRequest) => Promise<GeneratedContent | null>;
-
-  // NEW: Image to Video
   convertImageToVideo: (request: ImageToVideoRequest) => Promise<GeneratedContent | null>;
-
-  // NEW: Video to Video
   transformVideo: (request: VideoToVideoRequest) => Promise<GeneratedContent | null>;
 }
 
+const stableCallbacks = (opts: UseAIContentOptions): AIOptionCallbacks | undefined => {
+  if (!opts.onError && !opts.onProgress) return undefined;
+  return { onError: opts.onError, onProgress: opts.onProgress };
+};
+
 export function useAIContent(options: UseAIContentOptions): UseAIContentReturn {
-  const [isLoading, setIsLoading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const callbacks = useMemo(() => stableCallbacks(options), [options.onError, options.onProgress]);
+  const { service, ctx } = useAIContentContext({
+    providers: options.providers,
+    apiKey: options.apiKey,
+    model: options.model,
+    callbacks,
+  });
 
-  // Stabilize callbacks with refs to avoid unnecessary re-renders
-  const onProgressRef = useRef(options.onProgress);
-  const onErrorRef = useRef(options.onError);
+  const generateBlogPost = useCallback(
+    (request: BlogGenerationRequest) =>
+      ctx.execute(() => service.generateBlogPost(request), 'Failed to generate blog post', { reportProgress: true }),
+    [ctx, service],
+  );
 
-  // Update refs when callbacks change
-  useMemo(() => {
-    onProgressRef.current = options.onProgress;
-    onErrorRef.current = options.onError;
-  }, [options.onProgress, options.onError]);
+  const generateSocialContent = useCallback(
+    (request: SocialContentRequest) =>
+      ctx.execute(() => service.generateSocialContent(request), 'Failed to generate social content'),
+    [ctx, service],
+  );
 
-  // Use ref to track if service has been created with these exact configs
-  const serviceRef = useRef<{
-    service: AIContentService;
-    providers: ProviderConfig | string | undefined;
-    model?: string;
-  } | null>(null);
+  const generateForAllPlatforms = useCallback(
+    async (topic: string, tone: ContentTone): Promise<GeneratedSocialContent[]> => {
+      const result = await ctx.execute(
+        () => service.generateForAllPlatforms(topic, tone),
+        'Failed to generate content for all platforms',
+      );
+      return result ?? [];
+    },
+    [ctx, service],
+  );
 
-  const service = useMemo(() => {
-    const configKey = options.providers || options.apiKey;
-    const modelKey = options.model;
+  const generateVideoScript = useCallback(
+    (request: VideoScriptRequest) =>
+      ctx.execute(() => service.generateVideoScript(request), 'Failed to generate video script'),
+    [ctx, service],
+  );
 
-    // Check if we can reuse existing service
-    if (serviceRef.current &&
-        serviceRef.current.providers === configKey &&
-        serviceRef.current.model === modelKey) {
-      return serviceRef.current.service;
-    }
+  const generateContentCalendar = useCallback(
+    async (niche: string, days: number): Promise<ContentCalendarEntry[]> => {
+      const result = await ctx.execute(
+        () => service.generateContentCalendar(niche, days),
+        'Failed to generate calendar',
+      );
+      return result ?? [];
+    },
+    [ctx, service],
+  );
 
-    // Create new service
-    let newService: AIContentService;
-    if (options.providers) {
-      newService = new AIContentService(options.providers);
-    } else if (options.apiKey) {
-      newService = new AIContentService(options.apiKey, options.model);
-    } else {
-      throw new Error('Either providers or apiKey must be provided');
-    }
+  const analyzeSentiment = useCallback(
+    (content: string) => ctx.execute(() => service.analyzeSentiment(content), 'Failed to analyze sentiment'),
+    [ctx, service],
+  );
 
-    // Cache the service
-    serviceRef.current = {
-      service: newService,
-      providers: configKey,
-      model: modelKey,
-    };
+  const analyzeContent = useCallback(
+    (request: ContentAnalysisRequest) => ctx.execute(() => service.analyzeContent(request), 'Failed to analyze content'),
+    [ctx, service],
+  );
 
-    return newService;
-  }, [options.providers, options.apiKey, options.model]);
+  const optimizeSEO = useCallback(
+    (request: SEOOptimizationRequest) => ctx.execute(() => service.optimizeSEO(request), 'Failed to optimize SEO'),
+    [ctx, service],
+  );
 
-  const generateBlogPost = useCallback(async (request: BlogGenerationRequest) => {
-    setIsLoading(true);
-    setProgress(0);
-    setError(null);
-    try {
-      const result = await service.generateBlogPost(request);
-      setProgress(100);
-      onProgressRef.current?.(100);
-      return result;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to generate blog post');
-      setError(error.message);
-      onErrorRef.current?.(error);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
+  const calculateSEOScore = useCallback(
+    (content: string, keywords: string[]) =>
+      ctx.execute(() => service.calculateSEOScore(content, keywords), 'Failed to calculate SEO score'),
+    [ctx, service],
+  );
 
-  const generateSocialContent = useCallback(async (request: SocialContentRequest) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await service.generateSocialContent(request);
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate social content');
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
+  const predictABTest = useCallback(
+    async (request: ABTestRequest): Promise<ABTestPrediction[]> => {
+      const result = await ctx.execute(() => service.predictABTest(request), 'Failed to predict A/B test');
+      return result ?? [];
+    },
+    [ctx, service],
+  );
 
-  const generateForAllPlatforms = useCallback(async (topic: string, tone: ContentTone) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await service.generateForAllPlatforms(topic, tone);
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate content');
-      return [];
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
+  const compareVariants = useCallback(
+    (variantA: string, variantB: string) =>
+      ctx.execute(() => service.compareVariants(variantA, variantB), 'Failed to compare variants'),
+    [ctx, service],
+  );
 
-  const generateVideoScript = useCallback(async (request: VideoScriptRequest) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await service.generateVideoScript(request);
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate video script');
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
+  const generateHashtags = useCallback(
+    async (content: string, count: number): Promise<string[]> => {
+      const result = await ctx.execute(() => service.generateHashtags(content, count), 'Failed to generate hashtags');
+      return result ?? [];
+    },
+    [ctx, service],
+  );
 
-  const generateContentCalendar = useCallback(async (niche: string, days: number) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await service.generateContentCalendar(niche, days);
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate calendar');
-      return [];
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
+  const generateImagePrompt = useCallback(
+    (description: string, style: string) =>
+      ctx.execute(() => service.generateImagePrompt(description, style), 'Failed to generate image prompt'),
+    [ctx, service],
+  );
 
-  const analyzeSentiment = useCallback(async (content: string): Promise<SentimentAnalysisResult | null> => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await service.analyzeSentiment(content);
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to analyze sentiment');
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
+  const generateVoiceScript = useCallback(
+    (topic: string, emotion: Emotion, duration: number) =>
+      ctx.execute(() => service.generateVoiceScript(topic, emotion, duration), 'Failed to generate voice script', { reportProgress: true }),
+    [ctx, service],
+  );
 
-  const analyzeContent = useCallback(async (request: ContentAnalysisRequest) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await service.analyzeContent(request);
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to analyze content');
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
+  const generateImage = useCallback(
+    (request: ImageGenerationRequest) =>
+      ctx.execute(() => service.generateImage(request), 'Failed to generate image', { reportProgress: true }),
+    [ctx, service],
+  );
 
-  const optimizeSEO = useCallback(async (request: SEOOptimizationRequest) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await service.optimizeSEO(request);
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to optimize SEO');
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
+  const generateVideo = useCallback(
+    (request: VideoGenerationRequest) =>
+      ctx.execute(() => service.generateVideo(request), 'Failed to generate video', { reportProgress: true }),
+    [ctx, service],
+  );
 
-  const calculateSEOScore = useCallback(async (content: string, keywords: string[]): Promise<SEOScoreBreakdown | null> => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await service.calculateSEOScore(content, keywords);
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to calculate SEO score');
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
+  const convertImageToVideo = useCallback(
+    (request: ImageToVideoRequest) =>
+      ctx.execute(() => service.convertImageToVideo(request), 'Failed to convert image to video', { reportProgress: true }),
+    [ctx, service],
+  );
 
-  const predictABTest = useCallback(async (request: ABTestRequest) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await service.predictABTest(request);
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to predict A/B test');
-      return [];
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
-
-  const compareVariants = useCallback(async (variantA: string, variantB: string): Promise<ABTestComparison | null> => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await service.compareVariants(variantA, variantB);
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to compare variants');
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
-
-  const generateHashtags = useCallback(async (content: string, count: number) => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await service.generateHashtags(content, count);
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate hashtags');
-      return [];
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
-
-  const generateImagePrompt = useCallback(async (description: string, style: string): Promise<string | null> => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await service.generateImagePrompt(description, style);
-      return result;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate image prompt');
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
-
-  const generateVoiceScript = useCallback(async (topic: string, emotion: Emotion, duration: number) => {
-    setIsLoading(true);
-    setProgress(0);
-    setError(null);
-    try {
-      const result = await service.generateVoiceScript(topic, emotion, duration);
-      setProgress(100);
-      onProgressRef.current?.(100);
-      return result;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to generate voice script');
-      setError(error.message);
-      onErrorRef.current?.(error);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
-
-  // NEW: Image generation
-  const generateImage = useCallback(async (request: ImageGenerationRequest) => {
-    setIsLoading(true);
-    setProgress(0);
-    setError(null);
-    try {
-      const result = await service.generateImage(request);
-      setProgress(100);
-      onProgressRef.current?.(100);
-      return result;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to generate image');
-      setError(error.message);
-      onErrorRef.current?.(error);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
-
-  // NEW: Video generation
-  const generateVideo = useCallback(async (request: VideoGenerationRequest) => {
-    setIsLoading(true);
-    setProgress(0);
-    setError(null);
-    try {
-      const result = await service.generateVideo(request);
-      setProgress(100);
-      onProgressRef.current?.(100);
-      return result;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to generate video');
-      setError(error.message);
-      onErrorRef.current?.(error);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
-
-  // NEW: Image to video
-  const convertImageToVideo = useCallback(async (request: ImageToVideoRequest) => {
-    setIsLoading(true);
-    setProgress(0);
-    setError(null);
-    try {
-      const result = await service.convertImageToVideo(request);
-      setProgress(100);
-      onProgressRef.current?.(100);
-      return result;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to convert image to video');
-      setError(error.message);
-      onErrorRef.current?.(error);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
-
-  // NEW: Video to video
-  const transformVideo = useCallback(async (request: VideoToVideoRequest) => {
-    setIsLoading(true);
-    setProgress(0);
-    setError(null);
-    try {
-      const result = await service.transformVideo(request);
-      setProgress(100);
-      onProgressRef.current?.(100);
-      return result;
-    } catch (err) {
-      const error = err instanceof Error ? err : new Error('Failed to transform video');
-      setError(error.message);
-      onErrorRef.current?.(error);
-      return null;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [service]);
+  const transformVideo = useCallback(
+    (request: VideoToVideoRequest) =>
+      ctx.execute(() => service.transformVideo(request), 'Failed to transform video', { reportProgress: true }),
+    [ctx, service],
+  );
 
   return {
-    isLoading,
-    progress,
-    error,
+    isLoading: ctx.isLoading,
+    progress: ctx.progress,
+    error: ctx.error,
+    errorCode: ctx.errorCode,
     generateBlogPost,
     generateSocialContent,
     generateForAllPlatforms,
