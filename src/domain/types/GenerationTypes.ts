@@ -100,25 +100,8 @@ export interface CreditCost {
 }
 
 /**
- * Generation cost by type
+ * Re-export the canonical credit-cost map and calculator from
+ * domain/calculations/ContentCreditCost. Kept here for backward
+ * compatibility with existing consumers.
  */
-export const GENERATION_COSTS: Record<GenerationType, CreditCost> = {
-  'text-to-image': { standard: 1, hd: 2, '4k': 4 },
-  'image-to-image': { standard: 1, hd: 2, '4k': 4 },
-  'image-to-video': { standard: 3, hd: 5, '4k': 8 },
-  'text-to-video': { standard: 5, hd: 8, '4k': 12 },
-} as const;
-
-/**
- * Calculate credit cost for generation
- */
-export function calculateCreditCost(
-  type: GenerationType,
-  quality: ImageQuality | VideoQuality = 'standard',
-): number {
-  const costConfig = GENERATION_COSTS[type];
-  if (quality in costConfig) {
-    return costConfig[quality as keyof CreditCost];
-  }
-  return costConfig.standard;
-}
+export { CREDIT_COSTS as GENERATION_COSTS, calculateContentCreditCost as calculateCreditCost } from '../calculations/ContentCreditCost';
