@@ -1,69 +1,68 @@
-import { useState, useCallback, useMemo } from 'react';
-import { AIContentService } from '../../application/services/AIContentService';
-import type { SocialContentRequest, GeneratedSocialContent } from '../../domain/entities/ContentGeneration';
-import type { ContentTone, SocialPlatform } from '../../domain/types';
+/**
+ * useSocialContentGenerator
+ * Specialized hook for social content generation.
+ * Delegates to the AIContentService through the shared useAIContentContext.
+ */
 
-interface UseSocialContentGeneratorOptions {
+import { useCallback, useState } from 'react';
+import type { SocialContentRequest, GeneratedSocialContent } from '../../domain/entities/ContentGeneration';
+import type { ContentTone } from '../../domain/types';
+import { useAIContentContext } from './internal/useAIContentContext';
+
+export interface UseSocialContentGeneratorOptions {
   apiKey: string;
   model?: string;
 }
 
-interface UseSocialContentGeneratorReturn {
-  // State
+export interface UseSocialContentGeneratorReturn {
   isGenerating: boolean;
   generatedContents: GeneratedSocialContent[];
   error: string | null;
-
-  // Actions
   generateForPlatform: (request: SocialContentRequest) => Promise<void>;
   generateForAllPlatforms: (topic: string, tone: ContentTone) => Promise<void>;
   reset: () => void;
 }
 
 export function useSocialContentGenerator(
-  options: UseSocialContentGeneratorOptions
+  options: UseSocialContentGeneratorOptions,
 ): UseSocialContentGeneratorReturn {
-  const [isGenerating, setIsGenerating] = useState(false);
+  const { service, ctx } = useAIContentContext({
+    apiKey: options.apiKey,
+    model: options.model,
+  });
   const [generatedContents, setGeneratedContents] = useState<GeneratedSocialContent[]>([]);
-  const [error, setError] = useState<string | null>(null);
 
-  const service = useMemo(() => new AIContentService(options.apiKey, options.model), [options.apiKey, options.model]);
+  const generateForPlatform = useCallback(
+    async (request: SocialContentRequest) => {
+      const result = await ctx.execute(
+        () => service.generateSocialContent(request),
+        'Failed to generate content',
+      );
+      if (result) setGeneratedContents([result]);
+    },
+    [ctx, service],
+  );
 
-  const generateForPlatform = useCallback(async (request: SocialContentRequest) => {
-    setIsGenerating(true);
-    setError(null);
-    try {
-      const result = await service.generateSocialContent(request);
-      setGeneratedContents([result]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate content');
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [service]);
-
-  const generateForAllPlatforms = useCallback(async (topic: string, tone: ContentTone) => {
-    setIsGenerating(true);
-    setError(null);
-    try {
-      const results = await service.generateForAllPlatforms(topic, tone);
-      setGeneratedContents(results);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate content');
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [service]);
+  const generateForAllPlatforms = useCallback(
+    async (topic: string, tone: ContentTone) => {
+      const results = await ctx.execute(
+        () => service.generateForAllPlatforms(topic, tone),
+        'Failed to generate content',
+      );
+      if (results) setGeneratedContents(results);
+    },
+    [ctx, service],
+  );
 
   const reset = useCallback(() => {
     setGeneratedContents([]);
-    setError(null);
-  }, []);
+    ctx.setError(null);
+  }, [ctx]);
 
   return {
-    isGenerating,
+    isGenerating: ctx.isLoading,
     generatedContents,
-    error,
+    error: ctx.error,
     generateForPlatform,
     generateForAllPlatforms,
     reset,
