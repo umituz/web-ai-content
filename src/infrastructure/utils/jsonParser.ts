@@ -4,20 +4,23 @@
  */
 
 /**
- * Safe JSON parse with detailed error handling
+ * Safe JSON parse with detailed error context
+ * Returns the parsed value on success or `fallback` on failure.
+ * Diagnostics are delegated to the optional `onError` callback so the
+ * caller can decide how (or whether) to surface them.
  */
-export function safeJSONParse<T>(text: string, fallback: T): T {
+export function safeJSONParse<T>(text: string, fallback: T, onError?: (context: string) => void): T {
   try {
     return JSON.parse(text) as T;
   } catch (error) {
     if (error instanceof SyntaxError) {
-      // Provide more detailed error information
       const positionMatch = error.message.match(/position (\d+)/);
       const position = positionMatch ? parseInt(positionMatch[1], 10) : -1;
-
       if (position > 0) {
         const context = text.substring(Math.max(0, position - 50), position + 50);
-        console.error(`JSON parse error at position ${position}: "${context}"`);
+        onError?.(`JSON parse error at position ${position}: "${context}"`);
+      } else {
+        onError?.(`JSON parse error: ${error.message}`);
       }
     }
     return fallback;

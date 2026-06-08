@@ -3,6 +3,8 @@
  * Helps prevent memory leaks and optimize garbage collection
  */
 
+import { MemoryConfig } from '../../domain/limits/MemoryConfig';
+
 /**
  * Cleanup callback type
  */
@@ -21,7 +23,7 @@ export class MemoryManager {
   private maxSize: number;
   private cleanupThreshold: number;
 
-  constructor(maxSize = 50 * 1024 * 1024, cleanupThreshold = 0.8) {
+  constructor(maxSize = MemoryConfig.MANAGER.MAX_SIZE_BYTES, cleanupThreshold = MemoryConfig.MANAGER.CLEANUP_THRESHOLD_RATIO) {
     this.maxSize = maxSize;
     this.cleanupThreshold = cleanupThreshold;
   }
@@ -93,7 +95,7 @@ export class MemoryManager {
 
     // Remove resources until we're below threshold
     let freed = 0;
-    const targetSize = this.maxSize * this.cleanupThreshold * 0.5;
+    const targetSize = this.maxSize * this.cleanupThreshold * MemoryConfig.MANAGER.RETENTION_RATIO;
 
     for (const [id, entry] of entries) {
       if (this.totalSize - freed <= targetSize) break;
@@ -149,7 +151,7 @@ export class ObjectPool<T> {
   private reset: (obj: T) => void;
   private maxSize: number;
 
-  constructor(factory: () => T, reset: (obj: T) => void, maxSize = 100) {
+  constructor(factory: () => T, reset: (obj: T) => void, maxSize = MemoryConfig.POOL.DEFAULT_MAX_SIZE) {
     this.factory = factory;
     this.reset = reset;
     this.maxSize = maxSize;
@@ -274,13 +276,13 @@ export class ExpiringCache<K, V> {
   private defaultTTL: number;
   private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
-  constructor(defaultTTL = 60000, autoCleanup = true) {
+  constructor(defaultTTL = MemoryConfig.EXPIRING_CACHE.DEFAULT_TTL_MS, autoCleanup = true) {
     this.defaultTTL = defaultTTL;
 
     if (autoCleanup) {
       this.cleanupInterval = setInterval(() => {
         this.cleanup();
-      }, Math.min(defaultTTL, 60000)); // Cleanup at least once per minute
+      }, Math.min(defaultTTL, MemoryConfig.EXPIRING_CACHE.CLEANUP_INTERVAL_MS));
     }
   }
 

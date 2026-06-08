@@ -13,6 +13,8 @@ import type {
   VideoToVideoRequest,
   GeneratedContent,
 } from '../../domain/config/ProviderConfig';
+import { ProviderTimingConfig } from '../../domain/limits/ProviderTimingConfig';
+import { calculateRetryBackoffDelayMs } from '../../domain/calculations/RetryBackoffDelay';
 
 // Re-export commonly used types
 export type { ProviderHealth, ProviderType, GeneratedContent };
@@ -112,7 +114,7 @@ export abstract class BaseAIProvider implements IAIProvider {
    * Default cost estimation
    * Override for provider-specific pricing
    */
-  async estimateCost(request: TextGenerationRequest | ImageGenerationRequest | VideoGenerationRequest): Promise<number> {
+  async estimateCost(_request: TextGenerationRequest | ImageGenerationRequest | VideoGenerationRequest): Promise<number> {
     // Default: return 0 (free)
     return 0;
   }
@@ -130,8 +132,9 @@ export abstract class BaseAIProvider implements IAIProvider {
    * Helper method for HTTP requests with timeout
    */
   protected async fetchWithTimeout(url: string, options: RequestInit, timeout?: number): Promise<Response> {
+    const effectiveTimeout = timeout ?? this.config.timeout ?? ProviderTimingConfig.DEFAULT_TIMEOUT_MS;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout || this.config.timeout || 30000);
+    const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
 
     try {
       const response = await fetch(url, {
@@ -153,7 +156,7 @@ export abstract class BaseAIProvider implements IAIProvider {
     fn: () => Promise<T>,
     maxAttempts?: number
   ): Promise<T> {
-    const attempts = maxAttempts || this.config.retryAttempts || 3;
+    const attempts = maxAttempts ?? this.config.retryAttempts ?? ProviderTimingConfig.DEFAULT_RETRY_ATTEMPTS;
     let lastError: Error | undefined;
 
     for (let i = 0; i < attempts; i++) {
@@ -162,8 +165,7 @@ export abstract class BaseAIProvider implements IAIProvider {
       } catch (error) {
         lastError = error as Error;
         if (i < attempts - 1) {
-          // Exponential backoff
-          await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+          await new Promise(resolve => setTimeout(resolve, calculateRetryBackoffDelayMs(i)));
         }
       }
     }
@@ -186,22 +188,5 @@ export class ProviderError extends Error {
   }
 }
 
-/**
- * Provider not available error
- */
-export class ProviderUnavailableError extends ProviderError {
-  constructor(providerId: string) {
-    super(`Provider ${providerId} is not available`, providerId);
-    this.name = 'ProviderUnavailableError';
-  }
-}
-
-/**
- * Provider quota exhausted error
- */
-export class ProviderQuotaExhaustedError extends ProviderError {
-  constructor(providerId: string) {
-    super(`Provider ${providerId} quota exhausted`, providerId);
-    this.name = 'ProviderQuotaExhaustedError';
-  }
-}
+// ProviderUnavailableError and ProviderQuotaExhaustedError live in
+// domain/errors/AIErrors.ts and are re-exported via the package entry point.

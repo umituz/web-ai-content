@@ -4,16 +4,14 @@
  */
 
 import { BaseAIProvider, type GeneratedContent } from './base.provider';
+import { ProviderTimingConfig } from '../../domain/limits/ProviderTimingConfig';
+import { ModelDefaults } from '../../domain/limits/ModelDefaults';
+import { estimateFalGenerationCost, resolveFalImageSize, resolveFalInferenceSteps } from '../../domain/predicates';
 import type { FalConfig, TextGenerationRequest, ImageGenerationRequest, VideoGenerationRequest, ImageToVideoRequest, VideoToVideoRequest } from '../../domain/config/ProviderConfig';
 
 /**
  * FAL API response structure
  */
-interface FalQueueResponse {
-  request_id: string;
-  status: 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
-}
-
 interface FalResult {
   images?: Array<{ url: string }>;
   video?: { url: string };
@@ -28,18 +26,18 @@ export class FalProvider extends BaseAIProvider {
   readonly name = 'FAL';
   readonly type = 'multimodal' as const;
 
-  private models = {
-    image: 'fal-ai/flux/schnell',
-    video: 'fal-ai/hunyuan-video/1',
-    imageToVideo: 'fal-ai/fast-animatediff/image-to-video',
+  private models: { image: string; video: string; imageToVideo: string } = {
+    image: ModelDefaults.FAL_IMAGE,
+    video: ModelDefaults.FAL_VIDEO,
+    imageToVideo: ModelDefaults.FAL_IMAGE_TO_VIDEO,
   };
 
   constructor(config: FalConfig) {
     super({
       apiKey: config.apiKey,
       baseUrl: config.baseUrl || 'https://queue.fal.run',
-      timeout: config.timeout || 120000, // 2 minutes for generation
-      retryAttempts: config.retryAttempts || 2,
+      timeout: config.timeout || ProviderTimingConfig.FAL_TIMEOUT_MS,
+      retryAttempts: config.retryAttempts || ProviderTimingConfig.FAL_RETRY_ATTEMPTS,
     });
 
     if (config.models) {
@@ -77,8 +75,7 @@ export class FalProvider extends BaseAIProvider {
    * FAL doesn't provide cost estimation
    */
   async estimateCost(_request: ImageGenerationRequest | VideoGenerationRequest): Promise<number> {
-    // FAL uses credit-based system, return 1 as default
-    return 1;
+    return estimateFalGenerationCost(_request);
   }
 
   /**
@@ -97,8 +94,8 @@ export class FalProvider extends BaseAIProvider {
             },
             body: JSON.stringify({
               prompt: request.prompt,
-              image_size: this.getFormatSize(request.format),
-              num_inference_steps: this.getQualitySteps(request.quality),
+              image_size: resolveFalImageSize(request.format),
+              num_inference_steps: resolveFalInferenceSteps(request.quality),
               num_images: request.quantity || 1,
             }),
           }
@@ -237,32 +234,6 @@ export class FalProvider extends BaseAIProvider {
    */
   async videoToVideo(_request: VideoToVideoRequest): Promise<GeneratedContent> {
     throw new Error('FAL provider does not support video-to-video conversion');
-  }
-
-  /**
-   * Helper: Get format size
-   */
-  private getFormatSize(format?: string): string {
-    const sizeMap: Record<string, string> = {
-      square: 'square_hd',
-      landscape: 'landscape_16_9',
-      portrait: 'portrait_9_16',
-      story: 'portrait_9_16',
-      banner: 'landscape_16_9',
-    };
-    return sizeMap[format || 'square'] || 'square_hd';
-  }
-
-  /**
-   * Helper: Get quality steps
-   */
-  private getQualitySteps(quality?: string): number {
-    const qualityMap: Record<string, number> = {
-      standard: 4,
-      high: 6,
-      ultra: 8,
-    };
-    return qualityMap[quality || 'high'] || 6;
   }
 }
 
