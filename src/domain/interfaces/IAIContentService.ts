@@ -27,7 +27,7 @@ import {
 
 /**
  * AI Content Service Interface
- * Defines all AI-powered content generation capabilities
+ * Defines all AI-powered content generation capabilities.
  */
 export interface IAIContentService {
   // Content Generation
@@ -68,17 +68,4 @@ export interface IAIContentService {
     emotion: Emotion,
     duration: number
   ): Promise<GeneratedVideoScript>;
-}
-
-export interface IAIProvider {
-  generateText(prompt: string, options?: TextGenerationOptions): Promise<string>;
-  generateTextStream(prompt: string, options?: TextGenerationOptions): AsyncGenerator<string>;
-}
-
-export interface TextGenerationOptions {
-  maxTokens?: number;
-  temperature?: number;
-  topP?: number;
-  stopSequences?: string[];
-  model?: string;
 }
