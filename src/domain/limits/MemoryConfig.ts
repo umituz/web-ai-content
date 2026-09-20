@@ -1,7 +1,11 @@
 /**
  * Memory Configuration
- * Centralized defaults for the memory manager, object pool, and expiring
- * cache. Lets the consumer tune ceilings without reading source.
+ * Centralized defaults formerly used by the memory manager, object pool,
+ * and expiring cache utilities.
+ *
+ * @deprecated Those utilities were removed from the infrastructure layer;
+ * these constants are retained only so existing `./domain` imports keep
+ * resolving. Do not use them in new code.
  */
 
 export const MemoryConfig = {

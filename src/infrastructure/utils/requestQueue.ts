@@ -1,9 +1,11 @@
 /**
  * Request Queue and Batching System
- * Manages AI provider requests with concurrency control and rate limiting
+ * Manages AI provider requests with concurrency control, timeouts,
+ * cancellation, and rate limiting.
  */
 
 import { RequestQueueConfig } from '../../domain/limits/RequestQueueConfig';
+import { generateId } from '../../domain/utils/IdGenerator';
 
 /**
  * Priority levels for requests
@@ -22,7 +24,7 @@ interface QueuedRequest<T> {
   id: string;
   priority: RequestPriority;
   timestamp: number;
-  fn: () => Promise<T>;
+  fn: (signal: AbortSignal) => Promise<T>;
   resolve: (value: T) => void;
   reject: (error: Error) => void;
   retries: number;
@@ -70,10 +72,11 @@ export class RequestQueue {
   }
 
   /**
-   * Add a request to the queue
+   * Add a request to the queue. The executor receives the queue's
+   * AbortSignal so in-flight work is actually cancelled on timeout.
    */
   async add<T>(
-    fn: () => Promise<T>,
+    fn: (signal: AbortSignal) => Promise<T>,
     priority = RequestPriority.NORMAL,
     maxRetries = 3
   ): Promise<T> {
@@ -84,7 +87,7 @@ export class RequestQueue {
 
     return new Promise((resolve, reject) => {
       const request: QueuedRequest<T> = {
-        id: Math.random().toString(36).substring(7),
+        id: generateId('req'),
         priority,
         timestamp: Date.now(),
         fn,
@@ -175,19 +178,22 @@ export class RequestQueue {
         this.requestHistory.push(Date.now());
       }
 
-      // Execute with timeout
+      // Execute with timeout + abort-based cancellation
       const result = await this.withTimeout(
-        request.fn(),
+        request.fn,
         this.config.defaultTimeout
       );
 
       request.resolve(result);
     } catch (error) {
-      // Retry logic
+      // Retry logic with backoff delay to avoid retry storms
       if (request.retries < request.maxRetries) {
         request.retries++;
-        this.queue.unshift(request as QueuedRequest<unknown>);
-        this.sortQueue();
+        const delay = this.config.retryDelay * request.retries;
+        setTimeout(() => {
+          this.queue.unshift(request as QueuedRequest<unknown>);
+          this.sortQueue();
+        }, delay);
       } else {
         request.reject(error as Error);
       }
@@ -197,14 +203,14 @@ export class RequestQueue {
   }
 
   /**
-   * Add timeout to a promise
+   * Run a promise-producing function under a timeout. The executor receives
+   * the AbortController's signal, so timeouts cancel the underlying work —
+   * not just the caller's promise.
    */
   private async withTimeout<T>(
-    promise: Promise<T>,
+    fn: (signal: AbortSignal) => Promise<T>,
     timeout: number
   ): Promise<T> {
-    // Race the promise against a timer; the controller exists so callers
-    // can opt into abort-based cancellation by passing the signal through.
     const controller = new AbortController();
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -215,7 +221,7 @@ export class RequestQueue {
     });
 
     try {
-      const result = await Promise.race([promise, timeoutPromise]);
+      const result = await Promise.race([fn(controller.signal), timeoutPromise]);
       return result;
     } finally {
       if (timeoutId) clearTimeout(timeoutId);
@@ -264,31 +270,6 @@ export class RequestQueue {
 }
 
 /**
- * Singleton instance for global request queue
- */
-let globalQueue: RequestQueue | null = null;
-
-/**
- * Get or create global request queue
- */
-export function getGlobalQueue(config?: Partial<QueueConfig>): RequestQueue {
-  if (!globalQueue) {
-    globalQueue = new RequestQueue(config);
-  }
-  return globalQueue;
-}
-
-/**
- * Reset global queue (useful for testing)
- */
-export function resetGlobalQueue(): void {
-  if (globalQueue) {
-    globalQueue.clear();
-  }
-  globalQueue = null;
-}
-
-/**
  * Batch multiple requests and execute them together
  */
 export async function batchRequest<T>(
@@ -332,79 +313,4 @@ export async function batchRequest<T>(
   }
 
   return results;
-}
-
-/**
- * Debounce function for rapid requests
- */
-export function debounceRequest<T extends (...args: unknown[]) => unknown>(
-  fn: T,
-  delay: number
-): (...args: Parameters<T>) => Promise<ReturnType<T>> {
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  let pendingArgs: Parameters<T> | null = null;
-
-  return (...args: Parameters<T>): Promise<ReturnType<T>> => {
-    return new Promise((resolve, reject) => {
-      pendingArgs = args;
-
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-
-      timeoutId = setTimeout(async () => {
-        try {
-          const result = await fn(...(pendingArgs as Parameters<T>));
-          resolve(result);
-        } catch (error) {
-          reject(error instanceof Error ? error : new Error(String(error)));
-        } finally {
-          timeoutId = null;
-          pendingArgs = null;
-        }
-      }, delay);
-    });
-  };
-}
-
-/**
- * Throttle function for rate-limited requests
- */
-export function throttleRequest<T extends (...args: unknown[]) => unknown>(
-  fn: T,
-  interval: number
-): (...args: Parameters<T>) => Promise<ReturnType<T>> {
-  let lastCall = 0;
-  let pendingArgs: Parameters<T> | null = null;
-
-  return (...args: Parameters<T>): Promise<ReturnType<T>> => {
-    return new Promise((resolve, reject) => {
-      pendingArgs = args;
-      pendingResolve = resolve as (value: ReturnType<T>) => void;
-
-      const execute = async () => {
-        lastCall = Date.now();
-        try {
-          const result = await fn(...(pendingArgs as Parameters<T>));
-          resolve(result);
-        } catch (error) {
-          reject(error instanceof Error ? error : new Error(String(error)));
-        } finally {
-          pendingResolve = null;
-          pendingArgs = null;
-        }
-      };
-
-      const now = Date.now();
-      const timeSinceLastCall = now - lastCall;
-
-      if (timeSinceLastCall >= interval) {
-        execute();
-      } else {
-        // Queue for next available slot
-        const delay = interval - timeSinceLastCall;
-        setTimeout(execute, delay);
-      }
-    });
-  };
 }

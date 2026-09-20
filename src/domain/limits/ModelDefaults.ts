@@ -17,7 +17,12 @@ export const ModelDefaults = {
   PRUNA_VIDEO: 'p-video',
 } as const;
 
-export const AnthropicDefaults = {
+/**
+ * Defaults for the text-model path (single-SDK string configuration).
+ * Provider-agnostic: these are sampling/budget defaults for whichever
+ * text backend the service is wired to.
+ */
+export const TextModelDefaults = {
   TEXT_MODEL: 'claude-sonnet-4-20250514',
   MAX_TOKENS: 4_096,
   DEFAULT_TEMPERATURE: 0.7,

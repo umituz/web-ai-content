@@ -57,6 +57,19 @@ export function useAIContentContext(options: UseAIContentContextOptions): UseAIC
     callbacksRef.current = callbacks;
   }, [callbacks]);
 
+  // Tracks in-flight operations so overlapping calls cannot clear the
+  // loading state while another run is still active.
+  const activeRunsRef = useRef(0);
+  // Suppresses state updates after the component unmounts.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    const mounted = mountedRef;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   // Stable service creation by reference identity of providers/apiKey
   const service = useMemo(() => {
     if (providers) {
@@ -69,15 +82,17 @@ export function useAIContentContext(options: UseAIContentContextOptions): UseAIC
   }, [providers, apiKey, model]);
 
   const reportProgress = useCallback((value: number) => {
-    setProgress(value);
+    if (mountedRef.current) setProgress(value);
     callbacksRef.current?.onProgress?.(value);
   }, []);
 
   const reportError = useCallback((err: unknown, fallbackMessage: string): AIError => {
     const aiError = AIError.from(err, 'UNKNOWN');
     const finalError = aiError.message ? aiError : new AIError(fallbackMessage, 'UNKNOWN', err);
-    setError(finalError.message);
-    setErrorCode(finalError.code);
+    if (mountedRef.current) {
+      setError(finalError.message);
+      setErrorCode(finalError.code);
+    }
     callbacksRef.current?.onError?.(finalError);
     return finalError;
   }, []);
@@ -88,11 +103,14 @@ export function useAIContentContext(options: UseAIContentContextOptions): UseAIC
       fallbackMessage: string,
       execOptions?: { reportProgress?: boolean },
     ): Promise<T | null> => {
-      setIsLoading(true);
-      setError(null);
-      setErrorCode(null);
+      activeRunsRef.current += 1;
+      if (mountedRef.current) {
+        setIsLoading(true);
+        setError(null);
+        setErrorCode(null);
+      }
       if (execOptions?.reportProgress) {
-        setProgress(0);
+        reportProgress(0);
       }
       try {
         const result = await operation();
@@ -109,18 +127,23 @@ export function useAIContentContext(options: UseAIContentContextOptions): UseAIC
         }
         return null;
       } finally {
-        setIsLoading(false);
+        activeRunsRef.current -= 1;
+        if (activeRunsRef.current === 0 && mountedRef.current) {
+          setIsLoading(false);
+        }
       }
     },
     [reportError, reportProgress],
   );
 
-  const ctx: AsyncContext = {
+  // Memoized so downstream useCallback/useMemo dependencies stay stable —
+  // a fresh object each render would invalidate every consumer's memo.
+  const ctx: AsyncContext = useMemo(() => ({
     isLoading,
     progress,
     error,
     errorCode,
-    setError: (msg) => {
+    setError: (msg: string | null) => {
       setError(msg);
       setErrorCode(msg ? 'UNKNOWN' : null);
     },
@@ -129,7 +152,7 @@ export function useAIContentContext(options: UseAIContentContextOptions): UseAIC
     reportProgress,
     reportError,
     execute,
-  };
+  }), [isLoading, progress, error, errorCode, reportProgress, reportError, execute]);
 
   return { service, ctx };
 }

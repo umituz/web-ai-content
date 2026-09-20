@@ -67,19 +67,12 @@ export class GeminiProvider extends BaseAIProvider {
         return 'unavailable';
       }
 
-      // Simple health check - try to generate
+      // List models — a free, side-effect-free reachability check.
       const response = await this.fetchWithTimeout(
-        `${this.config.baseUrl}/models/${this.models.text}:generateContent?key=${this.config.apiKey}`,
+        `${this.config.baseUrl}/models`,
         {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{ text: 'test' }]
-            }]
-          }),
+          method: 'GET',
+          headers: this.authHeaders(),
         }
       );
 
@@ -87,6 +80,17 @@ export class GeminiProvider extends BaseAIProvider {
     } catch {
       return 'unavailable';
     }
+  }
+
+  /**
+   * Auth headers — the API key travels in a header, never in the URL
+   * (query strings are routinely captured in logs and proxies).
+   */
+  private authHeaders(): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': this.config.apiKey,
+    };
   }
 
   /**
@@ -103,12 +107,10 @@ export class GeminiProvider extends BaseAIProvider {
     try {
       const response = await this.withRetry(async () => {
         return await this.fetchWithTimeout(
-          `${this.config.baseUrl}/models/${this.models.text}:generateContent?key=${this.config.apiKey}`,
+          `${this.config.baseUrl}/models/${this.models.text}:generateContent`,
           {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: this.authHeaders(),
             body: JSON.stringify({
               contents: [{
                 parts: [{ text: request.prompt }]
@@ -151,12 +153,10 @@ export class GeminiProvider extends BaseAIProvider {
     try {
       const response = await this.withRetry(async () => {
         return await this.fetchWithTimeout(
-          `${this.config.baseUrl}/models/${this.models.image}:generateContent?key=${this.config.apiKey}`,
+          `${this.config.baseUrl}/models/${this.models.image}:generateContent`,
           {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: this.authHeaders(),
             body: JSON.stringify({
               contents: [{
                 parts: [{
@@ -179,15 +179,9 @@ export class GeminiProvider extends BaseAIProvider {
         throw new Error('No image data in response');
       }
 
-      // Convert base64 to blob URL
-      const byteCharacters = atob(imageData.data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: imageData.mimeType });
-      const url = URL.createObjectURL(blob);
+      // Embed as a data URL: portable across browser/Node/React Native and,
+      // unlike URL.createObjectURL, holds no global resource to revoke.
+      const url = `data:${imageData.mimeType};base64,${imageData.data}`;
 
       return {
         id: Date.now().toString(),

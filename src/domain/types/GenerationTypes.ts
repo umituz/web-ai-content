@@ -3,30 +3,22 @@
  * Types and constants for AI content generation
  */
 
+// Canonical format unions live in domain/limits/ImageFormatOptions —
+// re-exported here so existing consumers keep a single import path.
+export type { AspectRatio, ImageQuality, VideoQuality, MotionStrength } from '../limits/ImageFormatOptions';
+
 /**
  * Generation type categories
  */
 export type GenerationType = 'text-to-image' | 'image-to-image' | 'image-to-video' | 'text-to-video';
 
 /**
- * Image quality levels
- */
-export type ImageQuality = 'standard' | 'hd' | '4k';
-
-/**
- * Video quality levels
- */
-export type VideoQuality = '720p' | '1080p' | '4k';
-
-/**
- * Aspect ratio options
- */
-export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
-
-/**
  * Generation status
  */
 export type GenerationStatus = 'idle' | 'uploading' | 'processing' | 'completed' | 'failed' | 'cancelled';
+
+// Re-imported for local use in the input interfaces below.
+import type { AspectRatio, ImageQuality, VideoQuality, MotionStrength } from '../limits/ImageFormatOptions';
 
 /**
  * Image generation request
@@ -51,7 +43,7 @@ export interface VideoGenerationInput {
   duration?: number; // in seconds
   aspectRatio?: AspectRatio;
   quality?: VideoQuality;
-  motion?: 'slow' | 'medium' | 'fast';
+  motion?: MotionStrength;
 }
 
 /**

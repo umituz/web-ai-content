@@ -124,7 +124,10 @@ export async function runGeneration(
       options.apiKey,
       options.signal,
       (stage) => {
-        const progressEvent = { stage, progress: 50, message: `Generating... (${stage})` };
+        // 'predicting' is a pruna-specific stage; map it onto the public
+        // 'processing' stage so GenerationProgress stays provider-neutral.
+        const publicStage = stage === 'predicting' ? 'processing' : stage;
+        const progressEvent: GenerationProgress = { stage: publicStage, progress: 50, message: `Generating... (${stage})` };
         hooks.setProgress(progressEvent);
         options.onProgress?.(progressEvent);
       },
@@ -148,6 +151,14 @@ export async function runGeneration(
     deps.onSuccess?.(result);
     return result;
   } catch (err) {
+    // A cancelled run is not a failure: surface it as 'cancelled' without
+    // clobbering state (an aborted request rejects with an AbortError that
+    // would otherwise be reported as a generation failure).
+    if (options.signal.aborted) {
+      hooks.setStatus('cancelled');
+      hooks.setProgress(null);
+      return null;
+    }
     const e = err instanceof Error ? err : new Error(String(err));
     hooks.setError(e);
     hooks.setStatus('failed');

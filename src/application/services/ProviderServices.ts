@@ -13,17 +13,21 @@ import type {
   GeneratedContent,
 } from '../../domain/config/ProviderConfig';
 import type { ProviderFactory } from '../../infrastructure/providers/provider.factory';
+import { AIError } from '../../domain/errors/AIErrors';
 
-const wrapProviderError = (operation: string, error: unknown): Error => {
+const wrapProviderError = (operation: string, error: unknown): AIError => {
   const message = error instanceof Error ? error.message : 'Unknown error';
-  return new Error(`${operation} failed: ${message}`);
+  // Preserve the underlying error (and its code, when it is already an
+  // AIError) as `cause` instead of flattening it into a plain message.
+  return new AIError(`${operation} failed: ${message}`, 'PROVIDER_ERROR', error);
 };
 
 const ensureFactory = (factory: ProviderFactory, operation: string): void => {
   if (factory.getAllProviders().length === 0) {
-    throw new Error(
+    throw new AIError(
       `${operation} failed: No providers are registered. ` +
       'Provide a ProviderConfig with at least one enabled provider when constructing AIContentService.',
+      'PROVIDER_UNAVAILABLE',
     );
   }
 };
