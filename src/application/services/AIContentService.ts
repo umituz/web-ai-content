@@ -10,10 +10,10 @@
  * consumers while the underlying work is split along single-responsibility lines.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import type LlmClient from '@anthropic-ai/sdk';
 import type { IAIContentService } from '../../domain/interfaces/IAIContentService';
 import type { ITextGenerator, TextGenerationOptions } from '../../domain/interfaces/ITextGenerator';
-import { AnthropicDefaults } from '../../domain/limits/ModelDefaults';
+import { TextModelDefaults } from '../../domain/limits/ModelDefaults';
 import type {
   BlogGenerationRequest,
   GeneratedBlog,
@@ -64,7 +64,7 @@ import { ContentCalendarService } from './ContentCalendarService';
 import { MediaGenerationService } from './ProviderServices';
 import { GenerationExecutor } from './GenerationExecutor';
 
-interface AnthropicTextGeneratorOptions {
+interface LlmTextGeneratorOptions {
   maxTokens?: number;
   temperature?: number;
   topP?: number;
@@ -72,34 +72,49 @@ interface AnthropicTextGeneratorOptions {
 }
 
 /**
- * Anthropic text generator — implements the ITextGenerator strategy so that
- * legacy Anthropic-only configurations can still drive the new service layer.
+ * LLM text generator — the default ITextGenerator strategy for the legacy
+ * string-configuration mode (`new AIContentService(apiKey)`).
+ *
+ * The backing SDK is an *optional* peer dependency and is loaded lazily on
+ * first generation, so consumers that use provider-config mode (or inject
+ * their own ITextGenerator) never pay for — or even install — that SDK.
  */
-class AnthropicTextGenerator implements ITextGenerator {
+class LlmTextGenerator implements ITextGenerator {
+  private client: LlmClient | null = null;
+
   constructor(
-    private readonly client: Anthropic,
+    private readonly apiKey: string,
     private readonly defaultModel: string,
   ) {}
 
+  private async getClient(): Promise<LlmClient> {
+    if (!this.client) {
+      const { default: Client } = await import('@anthropic-ai/sdk');
+      this.client = new Client({ apiKey: this.apiKey });
+    }
+    return this.client;
+  }
+
   async generateText(prompt: string, options: TextGenerationOptions = {}): Promise<string> {
-    const merged: AnthropicTextGeneratorOptions = {
+    const client = await this.getClient();
+    const merged: LlmTextGeneratorOptions = {
       maxTokens: options.maxTokens,
       temperature: options.temperature,
       model: options.model,
       topP: options.topP,
     };
-    const message = await this.client.messages.create({
+    const message = await client.messages.create({
       model: merged.model || this.defaultModel,
-      max_tokens: merged.maxTokens || AnthropicDefaults.MAX_TOKENS,
-      temperature: merged.temperature ?? AnthropicDefaults.DEFAULT_TEMPERATURE,
-      top_p: merged.topP ?? AnthropicDefaults.DEFAULT_TOP_P,
+      max_tokens: merged.maxTokens || TextModelDefaults.MAX_TOKENS,
+      temperature: merged.temperature ?? TextModelDefaults.DEFAULT_TEMPERATURE,
+      top_p: merged.topP ?? TextModelDefaults.DEFAULT_TOP_P,
       messages: [{ role: 'user', content: prompt }],
     });
     const first = message.content[0];
     if (first?.type === 'text') {
       return first.text;
     }
-    throw new Error('Unexpected response type from Anthropic API');
+    throw new Error('Unexpected response type from text model API');
   }
 
   async *generateTextStream(prompt: string, options: TextGenerationOptions = {}): AsyncGenerator<string> {
@@ -124,11 +139,14 @@ interface ServiceBundle {
 const buildServices = (
   configOrApiKey: ProviderConfig | string,
   model: string,
+  textGenerator?: ITextGenerator,
 ): ServiceBundle => {
   if (typeof configOrApiKey === 'string') {
-    const generator = new AnthropicTextGenerator(new Anthropic({ apiKey: configOrApiKey }), model);
+    // Text-only mode: an injected generator wins; otherwise the default
+    // LLM-backed generator is created lazily from the API key.
+    const generator = textGenerator ?? new LlmTextGenerator(configOrApiKey, model);
     const executor = new GenerationExecutor(generator);
-    // Anthropic-only mode: factory has no providers, media-generation methods
+    // Text-only mode: factory has no providers, media-generation methods
     // will surface a clear error explaining ProviderConfig is required.
     const emptyFactory = new ProviderFactory({
       priority: [],
@@ -191,8 +209,20 @@ export class AIContentService implements IAIContentService {
   private readonly contentCalendarService: ContentCalendarService;
   private readonly mediaGenerationService: MediaGenerationService;
 
-  constructor(configOrApiKey: ProviderConfig | string, model: string = AnthropicDefaults.TEXT_MODEL) {
-    const bundle = buildServices(configOrApiKey, model);
+  /**
+   * @param configOrApiKey Provider configuration (multi-provider mode) or a
+   *        bare API key (legacy text-only mode).
+   * @param model Default text model for the legacy string mode.
+   * @param textGenerator Optional custom text backend for the legacy string
+   *        mode. Injecting one decouples the service from the default
+   *        LLM-backed generator entirely.
+   */
+  constructor(
+    configOrApiKey: ProviderConfig | string,
+    model: string = TextModelDefaults.TEXT_MODEL,
+    textGenerator?: ITextGenerator,
+  ) {
+    const bundle = buildServices(configOrApiKey, model, textGenerator);
     this.providerFactory = bundle.providerFactory;
     this.blogService = bundle.blogService;
     this.socialService = bundle.socialService;

@@ -15,6 +15,7 @@ import type {
 } from '../../domain/config/ProviderConfig';
 import { ProviderTimingConfig } from '../../domain/limits/ProviderTimingConfig';
 import { calculateRetryBackoffDelayMs } from '../../domain/calculations/RetryBackoffDelay';
+import { AIError } from '../../domain/errors/AIErrors';
 
 // Re-export commonly used types
 export type { ProviderHealth, ProviderType, GeneratedContent };
@@ -176,14 +177,18 @@ export abstract class BaseAIProvider implements IAIProvider {
 
 /**
  * Provider error class
+ *
+ * Extends AIError so provider failures flow through the package-wide error
+ * taxonomy (`code`, `cause`) while keeping `instanceof Error` and the
+ * original constructor shape intact for existing consumers.
  */
-export class ProviderError extends Error {
+export class ProviderError extends AIError {
   constructor(
     message: string,
     public readonly providerId: string,
-    public readonly originalError?: unknown
+    originalError?: unknown
   ) {
-    super(message);
+    super(message, 'PROVIDER_ERROR', originalError);
     this.name = 'ProviderError';
   }
 }

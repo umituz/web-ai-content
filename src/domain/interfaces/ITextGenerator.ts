@@ -12,8 +12,9 @@ export interface TextGenerationOptions {
 
 /**
  * TextGenerator Interface
- * Strategy contract: any text generation backend (Anthropic, Groq, multi-provider
- * factory) can drive the service layer by implementing this interface.
+ * Strategy contract: any text generation backend (an LLM client SDK, Groq,
+ * a multi-provider factory, or a fully custom implementation) can drive the
+ * service layer by implementing this interface.
  */
 export interface ITextGenerator {
   generateText(prompt: string, options?: TextGenerationOptions): Promise<string>;

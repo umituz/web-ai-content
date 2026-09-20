@@ -1,10 +1,11 @@
 /**
- * Optimized JSON Parsing Utilities
- * Handles large JSON responses efficiently with streaming support
+ * JSON Parsing Utilities
+ * Robust extraction and parsing of JSON from LLM responses, which are
+ * frequently wrapped in prose or markdown fences.
  */
 
 /**
- * Safe JSON parse with detailed error context
+ * Safe JSON parse with detailed error context.
  * Returns the parsed value on success or `fallback` on failure.
  * Diagnostics are delegated to the optional `onError` callback so the
  * caller can decide how (or whether) to surface them.
@@ -28,88 +29,59 @@ export function safeJSONParse<T>(text: string, fallback: T, onError?: (context: 
 }
 
 /**
- * Extract JSON from AI response (handles markdown code blocks and noise)
+ * Extract a JSON payload from an AI response.
+ *
+ * Order matters: fenced code blocks are tried first because they carry an
+ * explicit boundary — a greedy brace match would otherwise swallow prose
+ * containing braces, and fences would almost never win.
  */
 export function extractJSON(text: string): string | null {
-  // Try to find JSON object first
+  // Exact fenced block (```json ... ``` or ``` ... ```)
+  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch && codeBlockMatch[1]) {
+    const candidate = codeBlockMatch[1].trim();
+    if (candidate.startsWith('{') || candidate.startsWith('[')) {
+      return candidate;
+    }
+  }
+
+  // Bare JSON object or array embedded in prose. Prefer the outermost
+  // balanced-looking span; JSON.parse in safeJSONParse rejects bad spans.
   const objectMatch = text.match(/\{[\s\S]*\}/);
   if (objectMatch) {
     return objectMatch[0];
   }
 
-  // Try to find JSON array
   const arrayMatch = text.match(/\[[\s\S]*\]/);
   if (arrayMatch) {
     return arrayMatch[0];
-  }
-
-  // Try to find JSON in markdown code blocks
-  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeBlockMatch) {
-    return codeBlockMatch[1].trim();
   }
 
   return null;
 }
 
 /**
- * Parse JSON response from AI with fallback
+ * Parse a JSON response from an AI with a fallback value.
+ * Parse failures are reported through the optional `onError` callback;
+ * by default they stay silent so callers keep their fallback semantics.
  */
-export function parseAIResponse<T>(response: string, fallback: T): T {
+export function parseAIResponse<T>(response: string, fallback: T, onError?: (context: string) => void): T {
   const json = extractJSON(response);
   if (!json) {
+    onError?.('No JSON payload found in response');
     return fallback;
   }
 
-  return safeJSONParse(json, fallback);
+  return safeJSONParse(json, fallback, onError);
 }
 
 /**
- * Streaming JSON parser for large responses
- * Chunks the parsing to avoid blocking the main thread
- */
-export async function parseJSONStreaming<T>(
-  text: string,
-  chunkSize = 10000
-): Promise<T> {
-  return new Promise((resolve, reject) => {
-    try {
-      // For smaller payloads, parse immediately
-      if (text.length <= chunkSize) {
-        resolve(JSON.parse(text) as T);
-        return;
-      }
-
-      // For larger payloads, use requestIdleCallback or setTimeout
-      const parseChunk = () => {
-        try {
-          const result = JSON.parse(text) as T;
-          resolve(result);
-        } catch (error) {
-          reject(error);
-        }
-      };
-
-      // Use requestIdleCallback if available, otherwise use setTimeout
-      if (typeof requestIdleCallback !== 'undefined') {
-        requestIdleCallback(() => parseChunk(), { timeout: 1000 });
-      } else {
-        setTimeout(parseChunk, 0);
-      }
-    } catch (error) {
-      reject(error);
-    }
-  });
-}
-
-/**
- * Validate JSON structure without parsing
+ * Validate JSON structure without returning the parsed value.
  */
 export function isValidJSON(text: string): boolean {
   const trimmed = text.trim();
   if (trimmed.length === 0) return false;
 
-  // Quick checks
   if (
     !(
       (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
@@ -125,153 +97,4 @@ export function isValidJSON(text: string): boolean {
   } catch {
     return false;
   }
-}
-
-/**
- * Deep clone with JSON (faster than structuredClone for some cases)
- */
-export function jsonClone<T>(obj: T): T {
-  try {
-    return JSON.parse(JSON.stringify(obj)) as T;
-  } catch {
-    throw new Error('Object cannot be cloned with JSON');
-  }
-}
-
-/**
- * Minify JSON (remove unnecessary whitespace)
- */
-export function minifyJSON(obj: unknown): string {
-  return JSON.stringify(obj);
-}
-
-/**
- * Pretty print JSON with custom indentation
- */
-export function prettyJSON(obj: unknown, indent = 2): string {
-  return JSON.stringify(obj, null, indent);
-}
-
-/**
- * Parse JSON with reviver function for transformation
- */
-export function parseJSONWithReviver<T>(
-  text: string,
-  reviver: (key: string, value: unknown) => unknown,
-  fallback: T
-): T {
-  try {
-    return JSON.parse(text, reviver) as T;
-  } catch {
-    return fallback;
-  }
-}
-
-/**
- * Batch parse multiple JSON strings
- */
-export function batchParseJSON<T>(
-  strings: string[],
-  fallback: T
-): T[] {
-  return strings.map(str => parseAIResponse(str, fallback));
-}
-
-/**
- * LRU cache for parsed JSON results
- */
-class JSONParseCache {
-  private cache = new Map<string, { value: unknown; timestamp: number }>();
-  private maxAge: number;
-  private maxSize: number;
-
-  constructor(maxAge = 60000, maxSize = 100) {
-    this.maxAge = maxAge;
-    this.maxSize = maxSize;
-  }
-
-  get(key: string): unknown | null {
-    const entry = this.cache.get(key);
-    if (!entry) return null;
-
-    if (Date.now() - entry.timestamp > this.maxAge) {
-      this.cache.delete(key);
-      return null;
-    }
-
-    return entry.value;
-  }
-
-  set(key: string, value: unknown): void {
-    // Evict oldest entries if cache is full
-    if (this.cache.size >= this.maxSize) {
-      const oldestKey = this.cache.keys().next().value;
-      this.cache.delete(oldestKey);
-    }
-
-    this.cache.set(key, { value, timestamp: Date.now() });
-  }
-
-  clear(): void {
-    this.cache.clear();
-  }
-}
-
-// Export singleton instance
-export const jsonParseCache = new JSONParseCache();
-
-/**
- * Parse JSON with caching
- */
-export function parseJSONCached<T>(text: string, fallback: T): T {
-  // Try cache first
-  const cached = jsonParseCache.get(text);
-  if (cached) {
-    return cached as T;
-  }
-
-  // Parse and cache
-  const result = safeJSONParse(text, fallback);
-  jsonParseCache.set(text, result);
-
-  return result;
-}
-
-/**
- * Truncate JSON string to max length (for logging/debugging)
- */
-export function truncateJSON(json: string, maxLength = 500): string {
-  if (json.length <= maxLength) {
-    return json;
-  }
-
-  return json.substring(0, maxLength) + '... (truncated)';
-}
-
-/**
- * Merge JSON objects (deep merge)
- */
-export function mergeJSON(base: string, patch: string): string {
-  const baseObj = JSON.parse(base);
-  const patchObj = JSON.parse(patch);
-
-  function deepMerge(target: unknown, source: unknown): unknown {
-    if (typeof target !== 'object' || target === null) return source;
-    if (typeof source !== 'object' || source === null) return source;
-    if (Array.isArray(target) && Array.isArray(source)) {
-      return [...target, ...source];
-    }
-
-    const result = { ...target } as Record<string, unknown>;
-    for (const key of Object.keys(source)) {
-      result[key] = deepMerge(
-        result[key],
-        (source as Record<string, unknown>)[key]
-      );
-    }
-
-    return result;
-  }
-
-  return JSON.stringify(deepMerge(baseObj, patchObj));
 }
