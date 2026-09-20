@@ -9,33 +9,12 @@ import { ModelDefaults } from '../../domain/limits/ModelDefaults';
 import { estimateGroqGenerationCost } from '../../domain/predicates/ProviderCostEstimator';
 import type { GroqConfig, TextGenerationRequest, ImageGenerationRequest, VideoGenerationRequest, ImageToVideoRequest, VideoToVideoRequest } from '../../domain/config/ProviderConfig';
 
-interface GroqTextService {
-  generateCompletion: (prompt: string, options: GroqGenerationOptions) => Promise<string>;
-  generateStructured: <T = Record<string, unknown>>(
-    prompt: string,
-    options: GroqGenerationOptions,
-  ) => Promise<T>;
-  streamCompletion: (
-    prompt: string,
-    callbacks: { onChunk: (chunk: string) => void; onComplete: (full: string) => void },
-    options: GroqGenerationOptions,
-  ) => Promise<void>;
-}
-
-interface GroqHttpClient {
-  initialize?: (config: GroqConfig) => void;
-  isInitialized?: () => boolean;
-}
-
-interface GroqGenerationOptions {
-  model?: string;
-  generationConfig?: {
-    temperature?: number;
-    maxTokens?: number;
-    topP?: number;
-  };
-  schema?: Record<string, unknown>;
-}
+// Typed against the real published module — `typeof import(...)` keeps the
+// contract honest (no hand-written mirror of the peer's API) while the
+// runtime import below stays lazy, keeping the peer optional.
+type GroqProviderModule = typeof import('@umituz/web-ai-groq-provider');
+type GroqTextService = GroqProviderModule['textGenerationService'];
+type GroqHttpClient = GroqProviderModule['groqHttpClient'];
 
 let textGenerationService: GroqTextService | null = null;
 let groqHttpClient: GroqHttpClient | null = null;
@@ -43,17 +22,20 @@ let groqHttpClient: GroqHttpClient | null = null;
 async function initializeGroqServices(config: GroqConfig): Promise<void> {
   if (textGenerationService && groqHttpClient) return;
   try {
-    // The provider package exposes a composition root, not pre-built
-    // singletons: configure it with our credentials and take the container.
-    const { configureProvider } = await import('@umituz/web-ai-groq-provider');
-    const container = configureProvider({
-      apiKey: config.apiKey,
-      baseUrl: config.baseUrl,
-      timeoutMs: config.timeout,
-      textModel: config.models?.text,
-    });
-    textGenerationService = container.textGeneration;
-    groqHttpClient = container.groqHttpClient;
+    // The peer exposes pre-built singletons. Configure the shared HTTP
+    // client with our credentials; text generation routes through it.
+    const { textGenerationService: textService, groqHttpClient: httpClient } =
+      await import('@umituz/web-ai-groq-provider');
+    if (!httpClient.isInitialized()) {
+      httpClient.initialize({
+        apiKey: config.apiKey,
+        baseUrl: config.baseUrl,
+        timeoutMs: config.timeout,
+        textModel: config.models?.text,
+      });
+    }
+    textGenerationService = textService;
+    groqHttpClient = httpClient;
   } catch (error) {
     console.warn('@umituz/web-ai-groq-provider not available. Groq text generation will be disabled.', error);
     throw new Error('@umituz/web-ai-groq-provider is required for Groq text generation. Please install it: npm install @umituz/web-ai-groq-provider');
