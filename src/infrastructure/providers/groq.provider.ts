@@ -37,22 +37,25 @@ interface GroqGenerationOptions {
   schema?: Record<string, unknown>;
 }
 
-interface GroqModule {
-  textGenerationService: GroqTextService;
-  groqHttpClient: GroqHttpClient;
-}
-
 let textGenerationService: GroqTextService | null = null;
 let groqHttpClient: GroqHttpClient | null = null;
 
-async function initializeGroqServices(): Promise<void> {
+async function initializeGroqServices(config: GroqConfig): Promise<void> {
   if (textGenerationService && groqHttpClient) return;
   try {
-    const module = (await import('@umituz/web-ai-groq-provider')) as unknown as GroqModule;
-    textGenerationService = module.textGenerationService;
-    groqHttpClient = module.groqHttpClient;
-  } catch {
-    console.warn('@umituz/web-ai-groq-provider not available. Groq text generation will be disabled.');
+    // The provider package exposes a composition root, not pre-built
+    // singletons: configure it with our credentials and take the container.
+    const { configureProvider } = await import('@umituz/web-ai-groq-provider');
+    const container = configureProvider({
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      timeoutMs: config.timeout,
+      textModel: config.models?.text,
+    });
+    textGenerationService = container.textGeneration;
+    groqHttpClient = container.groqHttpClient;
+  } catch (error) {
+    console.warn('@umituz/web-ai-groq-provider not available. Groq text generation will be disabled.', error);
     throw new Error('@umituz/web-ai-groq-provider is required for Groq text generation. Please install it: npm install @umituz/web-ai-groq-provider');
   }
 }
@@ -107,7 +110,7 @@ export class GroqProvider extends BaseAIProvider {
         return 'unavailable';
       }
 
-      await initializeGroqServices();
+      await initializeGroqServices(this.groqConfig!);
       ensureHttpClient(this.groqConfig!);
 
       // Simple health check - try to list models
@@ -140,7 +143,7 @@ export class GroqProvider extends BaseAIProvider {
    */
   async generateText(request: TextGenerationRequest): Promise<GeneratedContent> {
     try {
-      await initializeGroqServices();
+      await initializeGroqServices(this.groqConfig!);
       ensureHttpClient(this.groqConfig!);
 
       const content = await requireTextService().generateCompletion(request.prompt, {
@@ -174,7 +177,7 @@ export class GroqProvider extends BaseAIProvider {
     request: TextGenerationRequest & { schema?: Record<string, unknown> }
   ): Promise<T> {
     try {
-      await initializeGroqServices();
+      await initializeGroqServices(this.groqConfig!);
       ensureHttpClient(this.groqConfig!);
 
       return await requireTextService().generateStructured<T>(request.prompt, {
@@ -199,7 +202,7 @@ export class GroqProvider extends BaseAIProvider {
     onComplete: (fullText: string) => void
   ): Promise<void> {
     try {
-      await initializeGroqServices();
+      await initializeGroqServices(this.groqConfig!);
       ensureHttpClient(this.groqConfig!);
 
       await requireTextService().streamCompletion(
