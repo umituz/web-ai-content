@@ -18,6 +18,15 @@ export const SpeechPaceConfig = {
   TOKENS_PER_SECOND: 10,
 
   /**
+   * Flat tokens added to every JSON-shaped budget. Covers the JSON
+   * scaffolding (field names, arrays, quotes) and reasoning-model
+   * thinking tokens, which are billed from the same completion budget
+   * — without this floor short scripts truncate mid-JSON and the
+   * parser silently falls back to defaults.
+   */
+  JSON_TOKEN_OVERHEAD: 500,
+
+  /**
    * Content calendar entries scale their token budget linearly with
    * the number of days requested.
    */

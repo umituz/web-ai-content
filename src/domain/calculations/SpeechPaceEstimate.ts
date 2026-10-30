@@ -13,10 +13,10 @@ export function estimateWordCountForDuration(durationSeconds: number): number {
 
 /** Approximate max_tokens budget for a given duration. */
 export function estimateTokenBudgetForDuration(durationSeconds: number): number {
-  return durationSeconds * SpeechPaceConfig.TOKENS_PER_SECOND;
+  return durationSeconds * SpeechPaceConfig.TOKENS_PER_SECOND + SpeechPaceConfig.JSON_TOKEN_OVERHEAD;
 }
 
 /** Approximate max_tokens budget for a content calendar of N days. */
 export function estimateTokenBudgetForCalendarDays(days: number): number {
-  return days * SpeechPaceConfig.TOKENS_PER_CALENDAR_DAY;
+  return days * SpeechPaceConfig.TOKENS_PER_CALENDAR_DAY + SpeechPaceConfig.JSON_TOKEN_OVERHEAD;
 }
