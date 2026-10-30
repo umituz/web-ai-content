@@ -32,6 +32,7 @@ export interface GroqConfig extends BaseProviderConfig {
     text?: string;
     chat?: string;
   };
+  reasoningEffort?: 'low' | 'medium' | 'high';
 }
 
 /**

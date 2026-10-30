@@ -13,8 +13,9 @@ import type { GroqConfig, TextGenerationRequest, ImageGenerationRequest, VideoGe
 // contract honest (no hand-written mirror of the peer's API) while the
 // runtime import below stays lazy, keeping the peer optional.
 type GroqProviderModule = typeof import('@umituz/web-ai-groq-provider');
-type GroqTextService = GroqProviderModule['textGenerationService'];
-type GroqHttpClient = GroqProviderModule['groqHttpClient'];
+type GroqContainer = NonNullable<ReturnType<GroqProviderModule['getProvider']>>;
+type GroqTextService = GroqContainer['textGeneration'];
+type GroqHttpClient = GroqContainer['groqHttpClient'];
 
 let textGenerationService: GroqTextService | null = null;
 let groqHttpClient: GroqHttpClient | null = null;
@@ -22,29 +23,23 @@ let groqHttpClient: GroqHttpClient | null = null;
 async function initializeGroqServices(config: GroqConfig): Promise<void> {
   if (textGenerationService && groqHttpClient) return;
   try {
-    // The peer exposes pre-built singletons. Configure the shared HTTP
-    // client with our credentials; text generation routes through it.
-    const { textGenerationService: textService, groqHttpClient: httpClient } =
-      await import('@umituz/web-ai-groq-provider');
-    if (!httpClient.isInitialized()) {
-      httpClient.initialize({
+    // The peer exposes a configured container (singletons pre-2.x). Reuse the
+    // active one or configure it with our credentials; text generation
+    // routes through the container's services.
+    const mod = await import('@umituz/web-ai-groq-provider');
+    const container: GroqContainer =
+      mod.getProvider() ??
+      mod.configureProvider({
         apiKey: config.apiKey,
         baseUrl: config.baseUrl,
         timeoutMs: config.timeout,
         textModel: config.models?.text,
       });
-    }
-    textGenerationService = textService;
-    groqHttpClient = httpClient;
+    textGenerationService = container.textGeneration;
+    groqHttpClient = container.groqHttpClient;
   } catch (error) {
     console.warn('@umituz/web-ai-groq-provider not available. Groq text generation will be disabled.', error);
     throw new Error('@umituz/web-ai-groq-provider is required for Groq text generation. Please install it: npm install @umituz/web-ai-groq-provider');
-  }
-}
-
-function ensureHttpClient(config: GroqConfig): void {
-  if (groqHttpClient && !groqHttpClient.isInitialized?.()) {
-    groqHttpClient.initialize?.(config);
   }
 }
 
@@ -66,6 +61,7 @@ export class GroqProvider extends BaseAIProvider {
 
   private defaultModel: string = ModelDefaults.GROQ_TEXT;
   private groqConfig: GroqConfig | null = null;
+  private readonly reasoningEffort: 'low' | 'medium' | 'high' | undefined;
 
   constructor(config: GroqConfig) {
     super({
@@ -75,12 +71,8 @@ export class GroqProvider extends BaseAIProvider {
       retryAttempts: config.retryAttempts || ProviderTimingConfig.GROQ_RETRY_ATTEMPTS,
     });
     this.defaultModel = config.models?.text || this.defaultModel;
+    this.reasoningEffort = config.reasoningEffort;
     this.groqConfig = config;
-
-    // Initialize Groq HTTP client
-    if (typeof window !== 'undefined' && config.apiKey) {
-      groqHttpClient?.initialize?.(config);
-    }
   }
 
   /**
@@ -93,7 +85,6 @@ export class GroqProvider extends BaseAIProvider {
       }
 
       await initializeGroqServices(this.groqConfig!);
-      ensureHttpClient(this.groqConfig!);
 
       // Simple health check - try to list models
       const response = await this.fetchWithTimeout(
@@ -126,7 +117,6 @@ export class GroqProvider extends BaseAIProvider {
   async generateText(request: TextGenerationRequest): Promise<GeneratedContent> {
     try {
       await initializeGroqServices(this.groqConfig!);
-      ensureHttpClient(this.groqConfig!);
 
       const content = await requireTextService().generateCompletion(request.prompt, {
         model: request.model || this.defaultModel,
@@ -134,6 +124,7 @@ export class GroqProvider extends BaseAIProvider {
           temperature: request.temperature,
           maxTokens: request.maxTokens,
           topP: request.topP,
+          reasoningEffort: this.reasoningEffort,
         },
       });
 
@@ -160,13 +151,13 @@ export class GroqProvider extends BaseAIProvider {
   ): Promise<T> {
     try {
       await initializeGroqServices(this.groqConfig!);
-      ensureHttpClient(this.groqConfig!);
 
       return await requireTextService().generateStructured<T>(request.prompt, {
         model: request.model || this.defaultModel,
         generationConfig: {
           temperature: 0.1, // Lower temperature for JSON
           maxTokens: request.maxTokens || 2048,
+          reasoningEffort: this.reasoningEffort,
         },
         schema: request.schema,
       });
@@ -185,7 +176,6 @@ export class GroqProvider extends BaseAIProvider {
   ): Promise<void> {
     try {
       await initializeGroqServices(this.groqConfig!);
-      ensureHttpClient(this.groqConfig!);
 
       await requireTextService().streamCompletion(
         request.prompt,
@@ -196,6 +186,7 @@ export class GroqProvider extends BaseAIProvider {
             temperature: request.temperature,
             maxTokens: request.maxTokens,
             topP: request.topP,
+            reasoningEffort: this.reasoningEffort,
           },
         },
       );
