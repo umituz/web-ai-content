@@ -89,7 +89,8 @@ class LlmTextGenerator implements ITextGenerator {
 
   private async getClient(): Promise<LlmClient> {
     if (!this.client) {
-      const { default: Client } = await import('@anthropic-ai/sdk');
+      const specifier = '@anthropic-ai/sdk';
+      const { default: Client } = (await import(specifier)) as typeof import('@anthropic-ai/sdk');
       this.client = new Client({ apiKey: this.apiKey });
     }
     return this.client;

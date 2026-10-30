@@ -44,7 +44,8 @@ let prunaCorePromise: Promise<PrunaCore> | null = null;
 
 async function loadPrunaCore(): Promise<PrunaCore> {
   if (!prunaCorePromise) {
-    prunaCorePromise = import('@umituz/pruna-provider/core') as Promise<PrunaCore>;
+    const specifier = '@umituz/pruna-provider/core';
+    prunaCorePromise = import(specifier) as Promise<PrunaCore>;
   }
   return prunaCorePromise;
 }
