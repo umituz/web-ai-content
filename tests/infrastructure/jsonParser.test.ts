@@ -82,3 +82,26 @@ describe('isValidJSON', () => {
     expect(isValidJSON('')).toBe(false);
   });
 });
+
+describe('safeJSONParse repair pass', () => {
+  it('repairs a stray quote after a numeric value (gpt-oss calendar defect)', () => {
+    const payload = '[\n  {\n    "day": 7",\n    "topic": "Recovery run"\n  }\n]';
+    expect(safeJSONParse(payload, [])).toEqual([{ day: 7, topic: 'Recovery run' }]);
+  });
+
+  it('repairs a duplicated closing quote on string values', () => {
+    const payload = '{"title": "Winter trail", "note": "tag the brand""}';
+    expect(safeJSONParse(payload, {})).toEqual({ title: 'Winter trail', note: 'tag the brand' });
+  });
+
+  it('keeps the fallback when the payload is beyond repair', () => {
+    expect(safeJSONParse('{"unterminated', { safe: true })).toEqual({ safe: true });
+  });
+
+  it('does not touch valid JSON that merely contains quotes in strings', () => {
+    expect(safeJSONParse('{"quote": "he said \\"hi\\"", "n": 5}', {})).toEqual({
+      quote: 'he said "hi"',
+      n: 5,
+    });
+  });
+});

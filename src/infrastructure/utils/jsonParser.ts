@@ -5,8 +5,27 @@
  */
 
 /**
+ * Deterministic repairs for malformed JSON LLMs emit in practice.
+ * Each targets a pattern that can never occur in valid JSON, so applying
+ * them to a failing payload is always safe — the parse still validates
+ * the result afterwards.
+ */
+function repairCommonJsonDefects(text: string): string {
+  return (
+    text
+      // "day": 7",   →   "day": 7,     (stray quote after a numeric value)
+      .replace(/(:\s*-?\d+(?:\.\d+)?)\s*"/g, '$1')
+      // "day": "7"", →   "day": "7"    (duplicate closing quote on strings)
+      .replace(/(:\s*"[^"]*")"/g, '$1')
+  );
+}
+
+/**
  * Safe JSON parse with detailed error context.
  * Returns the parsed value on success or `fallback` on failure.
+ * A deterministic repair pass runs first when the raw parse fails —
+ * reasoning models occasionally emit stray quotes and the correction
+ * is cheaper than losing the whole payload to the fallback.
  * Diagnostics are delegated to the optional `onError` callback so the
  * caller can decide how (or whether) to surface them.
  */
@@ -14,6 +33,11 @@ export function safeJSONParse<T>(text: string, fallback: T, onError?: (context: 
   try {
     return JSON.parse(text) as T;
   } catch (error) {
+    try {
+      return JSON.parse(repairCommonJsonDefects(text)) as T;
+    } catch {
+      // fall through to the fallback below
+    }
     if (error instanceof SyntaxError) {
       const positionMatch = error.message.match(/position (\d+)/);
       const position = positionMatch ? parseInt(positionMatch[1], 10) : -1;

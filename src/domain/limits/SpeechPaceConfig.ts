@@ -28,7 +28,9 @@ export const SpeechPaceConfig = {
 
   /**
    * Content calendar entries scale their token budget linearly with
-   * the number of days requested.
+   * the number of days requested. Descriptions run long (~120 tokens
+   * per entry measured on gpt-oss) and reasoning tokens share the same
+   * completion budget — 100/day truncated 7-day calendars mid-array.
    */
-  TOKENS_PER_CALENDAR_DAY: 100,
+  TOKENS_PER_CALENDAR_DAY: 150,
 } as const;
