@@ -1,7 +1,3 @@
-/**
- * FAL AI Provider
- * Fast inference for image and video generation
- */
 
 import { BaseAIProvider, type GeneratedContent } from './base.provider';
 import { ProviderTimingConfig } from '../../domain/limits/ProviderTimingConfig';
@@ -9,18 +5,12 @@ import { ModelDefaults } from '../../domain/limits/ModelDefaults';
 import { estimateFalGenerationCost, resolveFalImageSize, resolveFalInferenceSteps } from '../../domain/predicates';
 import type { FalConfig, TextGenerationRequest, ImageGenerationRequest, VideoGenerationRequest, ImageToVideoRequest, VideoToVideoRequest } from '../../domain/config/ProviderConfig';
 
-/**
- * FAL API response structure
- */
 interface FalResult {
   images?: Array<{ url: string }>;
   video?: { url: string };
   error?: string;
 }
 
-/**
- * FAL Provider Implementation
- */
 export class FalProvider extends BaseAIProvider {
   readonly id = 'fal';
   readonly name = 'FAL';
@@ -45,16 +35,12 @@ export class FalProvider extends BaseAIProvider {
     }
   }
 
-  /**
-   * Health check for FAL
-   */
   async healthCheck(): Promise<'healthy' | 'degraded' | 'exhausted' | 'unavailable'> {
     try {
       if (!this.config.apiKey) {
         return 'unavailable';
       }
 
-      // Simple health check
       const response = await this.fetchWithTimeout(
         `${this.config.baseUrl}/fal-ai/flux/schnell/status`,
         {
@@ -71,16 +57,10 @@ export class FalProvider extends BaseAIProvider {
     }
   }
 
-  /**
-   * FAL doesn't provide cost estimation
-   */
   async estimateCost(_request: ImageGenerationRequest | VideoGenerationRequest): Promise<number> {
     return estimateFalGenerationCost(_request);
   }
 
-  /**
-   * Generate image using FAL
-   */
   async generateImage(request: ImageGenerationRequest): Promise<GeneratedContent> {
     try {
       const response = await this.withRetry(async () => {
@@ -127,9 +107,6 @@ export class FalProvider extends BaseAIProvider {
     }
   }
 
-  /**
-   * Generate video using FAL
-   */
   async generateVideo(request: VideoGenerationRequest): Promise<GeneratedContent> {
     try {
       const response = await this.withRetry(async () => {
@@ -174,9 +151,6 @@ export class FalProvider extends BaseAIProvider {
     }
   }
 
-  /**
-   * Convert image to video using FAL
-   */
   async imageToVideo(request: ImageToVideoRequest): Promise<GeneratedContent> {
     try {
       const response = await this.withRetry(async () => {
@@ -222,24 +196,15 @@ export class FalProvider extends BaseAIProvider {
     }
   }
 
-  /**
-   * FAL doesn't support text generation
-   */
   async generateText(_request: TextGenerationRequest): Promise<GeneratedContent> {
     throw new Error('FAL provider does not support text generation');
   }
 
-  /**
-   * FAL doesn't support video-to-video
-   */
   async videoToVideo(_request: VideoToVideoRequest): Promise<GeneratedContent> {
     throw new Error('FAL provider does not support video-to-video conversion');
   }
 }
 
-/**
- * Create a FAL provider
- */
 export function createFalProvider(config: FalConfig): FalProvider {
   return new FalProvider(config);
 }

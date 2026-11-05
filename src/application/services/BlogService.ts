@@ -1,7 +1,3 @@
-/**
- * Blog Service
- * Single responsibility: AI-powered blog post generation and orchestration.
- */
 
 import { PromptBuilder } from '../prompts/PromptBuilder';
 import { GenerationExecutor } from './GenerationExecutor';

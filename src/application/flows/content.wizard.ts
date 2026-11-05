@@ -1,19 +1,9 @@
-/**
- * Content Generation Wizard
- * Step-by-step wizard for AI content generation
- */
 
 import type { WizardStep } from './base.wizard';
 import type { BlogGenerationRequest, SocialContentRequest, VideoScriptRequest } from '../../domain/entities/ContentGeneration';
 
-/**
- * Content type options
- */
 export type ContentType = 'blog' | 'social' | 'script' | 'news' | 'ebook' | 'podcast';
 
-/**
- * Content wizard steps
- */
 export type ContentWizardStep =
   | 'select-type'
   | 'input-topic'
@@ -23,41 +13,28 @@ export type ContentWizardStep =
   | 'generating'
   | 'results';
 
-/**
- * Content wizard data
- */
 export interface ContentWizardData {
-  // Select type step
   contentType?: ContentType;
 
-  // Input topic step
   topic?: string;
   description?: string;
 
-  // Configure step
   tone?: 'professional' | 'casual' | 'enthusiastic' | 'humorous' | 'dramatic' | 'educational';
   platform?: 'twitter' | 'linkedin' | 'instagram' | 'threads' | 'tiktok' | 'facebook';
   targetAudience?: string;
   wordCount?: number;
   duration?: number;
 
-  // Advanced step
   keywords?: string[];
   includeImages?: boolean;
   includeCallToAction?: boolean;
   seoOptimization?: boolean;
   language?: string;
 
-  // Results step
   generatedContent?: string;
   generatedId?: string;
 }
 
-/**
- * Predefined steps for the content wizard.
- * Exported as data so both the imperative flows and the React hook
- * share the exact same step definition.
- */
 export const CONTENT_WIZARD_STEPS: ReadonlyArray<WizardStep<ContentWizardStep>> = [
   {
     id: 'select-type',
@@ -113,10 +90,6 @@ export const CONTENT_WIZARD_STEPS: ReadonlyArray<WizardStep<ContentWizardStep>> 
   },
 ];
 
-/**
- * Build a typed generation request from the wizard's collected data.
- * Throws when called before the data-collection steps are complete.
- */
 export function buildContentRequest(
   data: ContentWizardData,
 ): BlogGenerationRequest | SocialContentRequest | VideoScriptRequest {

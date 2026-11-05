@@ -1,7 +1,3 @@
-/**
- * Content Calendar Service
- * Single responsibility: AI-powered content calendar generation.
- */
 
 import { PromptBuilder } from '../prompts/PromptBuilder';
 import { GenerationExecutor } from './GenerationExecutor';

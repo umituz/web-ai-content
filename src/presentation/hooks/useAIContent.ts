@@ -1,10 +1,3 @@
-/**
- * useAIContent
- * Top-level React hook for AI content generation.
- * Composes useAIContentContext (state + service) with thin action callbacks
- * that delegate to the AIContentService facade. This keeps the hook
- * declarative: action name, signature, and a single-line delegation.
- */
 
 import { useCallback, useMemo } from 'react';
 import type {

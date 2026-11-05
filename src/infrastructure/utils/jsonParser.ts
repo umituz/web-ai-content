@@ -1,34 +1,12 @@
-/**
- * JSON Parsing Utilities
- * Robust extraction and parsing of JSON from LLM responses, which are
- * frequently wrapped in prose or markdown fences.
- */
 
-/**
- * Deterministic repairs for malformed JSON LLMs emit in practice.
- * Each targets a pattern that can never occur in valid JSON, so applying
- * them to a failing payload is always safe — the parse still validates
- * the result afterwards.
- */
 function repairCommonJsonDefects(text: string): string {
   return (
     text
-      // "day": 7",   →   "day": 7,     (stray quote after a numeric value)
       .replace(/(:\s*-?\d+(?:\.\d+)?)\s*"/g, '$1')
-      // "day": "7"", →   "day": "7"    (duplicate closing quote on strings)
       .replace(/(:\s*"[^"]*")"/g, '$1')
   );
 }
 
-/**
- * Safe JSON parse with detailed error context.
- * Returns the parsed value on success or `fallback` on failure.
- * A deterministic repair pass runs first when the raw parse fails —
- * reasoning models occasionally emit stray quotes and the correction
- * is cheaper than losing the whole payload to the fallback.
- * Diagnostics are delegated to the optional `onError` callback so the
- * caller can decide how (or whether) to surface them.
- */
 export function safeJSONParse<T>(text: string, fallback: T, onError?: (context: string) => void): T {
   try {
     return JSON.parse(text) as T;
@@ -36,7 +14,6 @@ export function safeJSONParse<T>(text: string, fallback: T, onError?: (context: 
     try {
       return JSON.parse(repairCommonJsonDefects(text)) as T;
     } catch {
-      // fall through to the fallback below
     }
     if (error instanceof SyntaxError) {
       const positionMatch = error.message.match(/position (\d+)/);
@@ -52,15 +29,7 @@ export function safeJSONParse<T>(text: string, fallback: T, onError?: (context: 
   }
 }
 
-/**
- * Extract a JSON payload from an AI response.
- *
- * Order matters: fenced code blocks are tried first because they carry an
- * explicit boundary — a greedy brace match would otherwise swallow prose
- * containing braces, and fences would almost never win.
- */
 export function extractJSON(text: string): string | null {
-  // Exact fenced block (```json ... ``` or ``` ... ```)
   const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlockMatch && codeBlockMatch[1]) {
     const candidate = codeBlockMatch[1].trim();
@@ -69,8 +38,6 @@ export function extractJSON(text: string): string | null {
     }
   }
 
-  // Bare JSON object or array embedded in prose. Prefer the outermost
-  // balanced-looking span; JSON.parse in safeJSONParse rejects bad spans.
   const objectMatch = text.match(/\{[\s\S]*\}/);
   if (objectMatch) {
     return objectMatch[0];
@@ -84,11 +51,6 @@ export function extractJSON(text: string): string | null {
   return null;
 }
 
-/**
- * Parse a JSON response from an AI with a fallback value.
- * Parse failures are reported through the optional `onError` callback;
- * by default they stay silent so callers keep their fallback semantics.
- */
 export function parseAIResponse<T>(response: string, fallback: T, onError?: (context: string) => void): T {
   const json = extractJSON(response);
   if (!json) {
@@ -99,9 +61,6 @@ export function parseAIResponse<T>(response: string, fallback: T, onError?: (con
   return safeJSONParse(json, fallback, onError);
 }
 
-/**
- * Validate JSON structure without returning the parsed value.
- */
 export function isValidJSON(text: string): boolean {
   const trimmed = text.trim();
   if (trimmed.length === 0) return false;

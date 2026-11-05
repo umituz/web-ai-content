@@ -1,19 +1,9 @@
-/**
- * Video Generation Wizard
- * Step-by-step wizard for AI video generation
- */
 
 import type { WizardStep } from './base.wizard';
 import type { VideoGenerationRequest, ImageToVideoRequest, VideoToVideoRequest } from '../../domain/config/ProviderConfig';
 
-/**
- * Video generation type
- */
 export type VideoGenerationType = 'text-to-video' | 'image-to-video' | 'video-to-video';
 
-/**
- * Video wizard steps
- */
 export type VideoWizardStep =
   | 'select-type'
   | 'input-source'
@@ -23,31 +13,23 @@ export type VideoWizardStep =
   | 'generating'
   | 'results';
 
-/**
- * Video wizard data
- */
 export interface VideoWizardData {
-  // Select type step
   generationType?: VideoGenerationType;
 
-  // Input source step
   prompt?: string;
   imageUrl?: string;
   sourceVideoUrl?: string;
 
-  // Configure step
   duration?: number;
   aspectRatio?: '16:9' | '9:16' | '1:1';
   style?: 'realistic' | 'animated' | 'cinematic' | 'documentary';
   quality?: 'standard' | 'high' | 'ultra';
 
-  // Advanced step
   motion?: 'slow' | 'medium' | 'fast';
   camera?: 'static' | 'pan' | 'zoom' | 'tracking';
   styleTransfer?: 'cinematic' | 'anime' | 'cartoon' | 'vintage';
   enhanceQuality?: boolean;
 
-  // Results step
   generatedVideoUrl?: string;
   generatedId?: string;
 }

@@ -1,8 +1,3 @@
-/**
- * useContentWizard
- * Hook for the AI content generation wizard.
- * Wraps the generic useWizardFlow factory with content-specific steps and helpers.
- */
 
 import { useCallback, useMemo } from 'react';
 import type { ContentWizardStep, ContentWizardData } from '../../application/flows/content.wizard';

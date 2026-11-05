@@ -1,8 +1,5 @@
 import { SocialPlatform, ContentTone, ContentType } from '../types';
 
-/**
- * Blog Generation Request
- */
 export interface BlogGenerationRequest {
   topic: string;
   blogType: 'tutorial' | 'listicle' | 'review' | 'opinion' | 'howto';
@@ -16,9 +13,6 @@ export interface BlogGenerationRequest {
   language?: string;
 }
 
-/**
- * Generated Blog Post
- */
 export interface GeneratedBlog {
   id: string;
   title: string;
@@ -40,9 +34,6 @@ export interface GeneratedBlog {
   imagePrompts?: string[];
 }
 
-/**
- * Social Content Generation Request
- */
 export interface SocialContentRequest {
   topic: string;
   platform: SocialPlatform;
@@ -53,9 +44,6 @@ export interface SocialContentRequest {
   includeCallToAction?: boolean;
 }
 
-/**
- * Generated Social Content
- */
 export interface GeneratedSocialContent {
   content: string;
   platform: SocialPlatform;
@@ -65,21 +53,15 @@ export interface GeneratedSocialContent {
   estimatedEngagement: number;
 }
 
-/**
- * Video Script Generation Request
- */
 export interface VideoScriptRequest {
   topic: string;
   tone: ContentTone;
-  duration: number; // in seconds
+  duration: number;
   targetAudience: string;
   includeVisuals: boolean;
   includeCallToAction: boolean;
 }
 
-/**
- * Generated Video Script
- */
 export interface GeneratedVideoScript {
   script: string;
   visualCues: string[];
@@ -89,9 +71,6 @@ export interface GeneratedVideoScript {
   callToAction?: string;
 }
 
-/**
- * Content Calendar Entry
- */
 export interface ContentCalendarEntry {
   date: Date;
   topic: string;

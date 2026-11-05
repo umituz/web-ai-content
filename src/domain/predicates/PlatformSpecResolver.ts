@@ -1,8 +1,3 @@
-/**
- * Platform Spec Resolver
- * Pure decision function: resolves a SocialPlatform's display rules
- * (style guide, length limit) with a sensible fallback for unknown platforms.
- */
 
 import type { PlatformSpecs, SocialPlatform } from '../types';
 import { PLATFORM_SPECS } from '../types';

@@ -1,8 +1,3 @@
-/**
- * Fal Image Rendering Options
- * Pure mapping from a logical format / quality label to the values the
- * FAL API actually expects (image_size identifier, inference steps).
- */
 
 const FAL_FORMAT_TO_IMAGE_SIZE: Readonly<Record<string, string>> = {
   square: 'square_hd',

@@ -1,7 +1,3 @@
-/**
- * Google Gemini Provider
- * Text and image generation using Google's Gemini API
- */
 
 import { BaseAIProvider, type GeneratedContent } from './base.provider';
 import { ProviderTimingConfig } from '../../domain/limits/ProviderTimingConfig';
@@ -9,9 +5,6 @@ import { estimateGeminiGenerationCost } from '../../domain/predicates/ProviderCo
 import { ModelDefaults } from '../../domain/limits/ModelDefaults';
 import type { GeminiConfig, TextGenerationRequest, ImageGenerationRequest, VideoGenerationRequest, ImageToVideoRequest, VideoToVideoRequest } from '../../domain/config/ProviderConfig';
 
-/**
- * Gemini API response
- */
 interface GeminiResponse {
   candidates: Array<{
     content: {
@@ -32,9 +25,6 @@ interface GeminiResponse {
   };
 }
 
-/**
- * Gemini Provider Implementation
- */
 export class GeminiProvider extends BaseAIProvider {
   readonly id = 'gemini';
   readonly name = 'Google Gemini';
@@ -58,16 +48,12 @@ export class GeminiProvider extends BaseAIProvider {
     }
   }
 
-  /**
-   * Health check for Gemini
-   */
   async healthCheck(): Promise<'healthy' | 'degraded' | 'exhausted' | 'unavailable'> {
     try {
       if (!this.config.apiKey) {
         return 'unavailable';
       }
 
-      // List models — a free, side-effect-free reachability check.
       const response = await this.fetchWithTimeout(
         `${this.config.baseUrl}/models`,
         {
@@ -82,10 +68,6 @@ export class GeminiProvider extends BaseAIProvider {
     }
   }
 
-  /**
-   * Auth headers — the API key travels in a header, never in the URL
-   * (query strings are routinely captured in logs and proxies).
-   */
   private authHeaders(): Record<string, string> {
     return {
       'Content-Type': 'application/json',
@@ -93,16 +75,10 @@ export class GeminiProvider extends BaseAIProvider {
     };
   }
 
-  /**
-   * Estimate cost for Gemini (uses Google AI pricing)
-   */
   async estimateCost(request: TextGenerationRequest | ImageGenerationRequest): Promise<number> {
     return estimateGeminiGenerationCost(request);
   }
 
-  /**
-   * Generate text using Gemini
-   */
   async generateText(request: TextGenerationRequest): Promise<GeneratedContent> {
     try {
       const response = await this.withRetry(async () => {
@@ -146,9 +122,6 @@ export class GeminiProvider extends BaseAIProvider {
     }
   }
 
-  /**
-   * Generate image using Gemini Imagen
-   */
   async generateImage(request: ImageGenerationRequest): Promise<GeneratedContent> {
     try {
       const response = await this.withRetry(async () => {
@@ -179,8 +152,6 @@ export class GeminiProvider extends BaseAIProvider {
         throw new Error('No image data in response');
       }
 
-      // Embed as a data URL: portable across browser/Node/React Native and,
-      // unlike URL.createObjectURL, holds no global resource to revoke.
       const url = `data:${imageData.mimeType};base64,${imageData.data}`;
 
       return {
@@ -199,34 +170,21 @@ export class GeminiProvider extends BaseAIProvider {
     }
   }
 
-  /**
-   * Gemini doesn't support video generation
-   */
   async generateVideo(_request: VideoGenerationRequest): Promise<GeneratedContent> {
     throw new Error('Gemini provider does not support video generation');
   }
 
-  /**
-   * Gemini doesn't support image-to-video
-   */
   async imageToVideo(_request: ImageToVideoRequest): Promise<GeneratedContent> {
     throw new Error('Gemini provider does not support image-to-video conversion');
   }
 
-  /**
-   * Gemini doesn't support video-to-video
-   */
   async videoToVideo(_request: VideoToVideoRequest): Promise<GeneratedContent> {
     throw new Error('Gemini provider does not support video-to-video conversion');
   }
 
-  /**
-   * Build image prompt with style modifiers
-   */
   private buildImagePrompt(request: ImageGenerationRequest): string {
     let prompt = request.prompt;
 
-    // Add style
     if (request.style) {
       const styles: Record<string, string> = {
         realistic: 'photorealistic, highly detailed, 8k resolution',
@@ -238,7 +196,6 @@ export class GeminiProvider extends BaseAIProvider {
       prompt += `, ${styles[request.style]}`;
     }
 
-    // Add quality
     if (request.quality === 'ultra') {
       prompt += ', ultra high quality, masterpiece';
     }
@@ -247,9 +204,6 @@ export class GeminiProvider extends BaseAIProvider {
   }
 }
 
-/**
- * Create a Gemini provider
- */
 export function createGeminiProvider(config: GeminiConfig): GeminiProvider {
   return new GeminiProvider(config);
 }

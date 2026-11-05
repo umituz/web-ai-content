@@ -1,14 +1,7 @@
-/**
- * Image Generation Wizard
- * Step-by-step wizard for AI image generation
- */
 
 import type { WizardStep } from './base.wizard';
 import type { ImageGenerationRequest } from '../../domain/config/ProviderConfig';
 
-/**
- * Image wizard steps
- */
 export type ImageWizardStep =
   | 'input-prompt'
   | 'select-style'
@@ -18,26 +11,18 @@ export type ImageWizardStep =
   | 'generating'
   | 'results';
 
-/**
- * Image wizard data
- */
 export interface ImageWizardData {
-  // Input prompt step
   prompt?: string;
 
-  // Select style step
   style?: 'realistic' | 'cartoon' | 'abstract' | 'minimalist' | 'vintage';
 
-  // Configure step
   format?: 'square' | 'landscape' | 'portrait' | 'story' | 'banner';
   quality?: 'standard' | 'high' | 'ultra';
   quantity?: number;
 
-  // Advanced step
   colorPalette?: string[];
   platform?: 'instagram' | 'youtube' | 'facebook' | 'twitter' | 'general';
 
-  // Results step
   generatedImageUrl?: string;
   generatedId?: string;
 }

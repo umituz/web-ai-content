@@ -1,7 +1,3 @@
-/**
- * Analysis Service
- * Single responsibility: AI-powered content analysis (sentiment, keywords, entities).
- */
 
 import { PromptBuilder } from '../prompts/PromptBuilder';
 import { GenerationExecutor } from './GenerationExecutor';

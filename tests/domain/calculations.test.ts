@@ -29,9 +29,9 @@ describe('calculateContentCreditCost', () => {
   });
 
   it('normalizes video quality vocabularies into pricing tiers', () => {
-    expect(calculateContentCreditCost('text-to-video', '720p')).toBe(5);   // → standard
-    expect(calculateContentCreditCost('text-to-video', '1080p')).toBe(8);  // → hd
-    expect(calculateContentCreditCost('text-to-video', '4k')).toBe(12);    // → 4k
+    expect(calculateContentCreditCost('text-to-video', '720p')).toBe(5);
+    expect(calculateContentCreditCost('text-to-video', '1080p')).toBe(8);
+    expect(calculateContentCreditCost('text-to-video', '4k')).toBe(12);
   });
 
   it('defaults to standard tier when quality is omitted', () => {
@@ -86,11 +86,10 @@ describe('SEO keyword math', () => {
 
   it('counts words', () => {
     expect(countWordsInContent('one two three')).toBe(3);
-    expect(countWordsInContent('')).toBe(1); // divide-by-zero guard
+    expect(countWordsInContent('')).toBe(1);
   });
 
   it('computes density as a percentage', () => {
-    // 'ai' appears twice in four words → 50%
     expect(calculateKeywordDensity('ai is ai great', 'ai')).toBeCloseTo(50);
   });
 });

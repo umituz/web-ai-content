@@ -1,45 +1,33 @@
 import { ContentType, ContentTone } from '../types';
 
-/**
- * A/B Test Variant
- */
 export interface ABTestVariant {
   id: string;
-  name?: string; // Optional, not always required
+  name?: string;
   content: string;
   contentType: ContentType;
   tone: ContentTone;
 }
 
-/**
- * A/B Test Prediction
- */
 export interface ABTestPrediction {
   variantId: string;
-  predictedEngagement: number; // 0-100
-  predictedCTR: number; // 0-100
-  predictedConversions: number; // 0-100
-  confidence: number; // 0-1
+  predictedEngagement: number;
+  predictedCTR: number;
+  predictedConversions: number;
+  confidence: number;
   reasoning: string;
   strengths: string[];
   weaknesses: string[];
   suggestions: string[];
 }
 
-/**
- * A/B Test Comparison
- */
 export interface ABTestComparison {
-  winner: string; // variant ID
-  confidence: number; // 0-1
-  improvement: string; // e.g., "+15% engagement"
+  winner: string;
+  confidence: number;
+  improvement: string;
   reasoning: string;
   recommendations: string[];
 }
 
-/**
- * A/B Test Request
- */
 export interface ABTestRequest {
   variants: ABTestVariant[];
   targetAudience: string;

@@ -51,14 +51,11 @@ describe('GenerationExecutor', () => {
 
 describe('AIContentService (legacy text-only mode)', () => {
   it('constructs without touching the optional LLM SDK', () => {
-    // The SDK is lazy-loaded: constructing with a bare API key must not
-    // require the optional text-SDK peer to be installed at this point.
     expect(() => new AIContentService('sk-test-key')).not.toThrow();
   });
 
   it('media generation without providers fails with a coded, actionable error', async () => {
     const service = new AIContentService('sk-test-key');
-    // Config errors throw synchronously (before any promise is created).
     const err: AIError = (() => {
       try {
         service.generateImage({ type: 'image', prompt: 'a cat' });
@@ -99,17 +96,13 @@ describe('AIContentService (provider-config mode)', () => {
       retryAttempts: 2,
       timeout: 30_000,
       groq: { apiKey: 'g', enabled: true },
-      // fal/gemini/pruna omitted — disabled by absence
     });
-    // generateText path needs a provider; with groq enabled but the peer
-    // package absent, the factory has one registered provider. We only
-    // assert construction and the no-network surface here.
     expect(service).toBeInstanceOf(AIContentService);
   });
 
   it('constructs with an empty (no-provider) factory configuration', () => {
     expect(
       () => new AIContentService({ priority: [], fallbackEnabled: false, retryAttempts: 0, timeout: 0 }),
-    ).not.toThrow(); // empty factory, lazy errors on use
+    ).not.toThrow();
   });
 });

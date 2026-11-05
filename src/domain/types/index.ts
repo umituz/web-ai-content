@@ -1,6 +1,3 @@
-/**
- * Platform Types
- */
 
 export type SocialPlatform = 'twitter' | 'linkedin' | 'instagram' | 'threads' | 'tiktok' | 'facebook';
 
@@ -14,9 +11,6 @@ export type Sentiment = 'positive' | 'neutral' | 'negative';
 
 export type BlogType = 'tutorial' | 'listicle' | 'review' | 'opinion' | 'howto';
 
-/**
- * Platform Specifications
- */
 export interface PlatformSpecs {
   maxLength: number;
   style: string;

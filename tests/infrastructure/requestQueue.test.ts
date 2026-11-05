@@ -49,9 +49,6 @@ describe('RequestQueue', () => {
         });
       });
 
-    // Either rejection may win the race; what matters is that the queue
-    // settles AND the abort signal reached the executor — otherwise the
-    // underlying request would keep running after the caller gave up.
     await expect(queue.add(hang, RequestPriority.NORMAL, 0)).rejects.toThrow();
     expect(signalListener).toHaveBeenCalledTimes(1);
   });
@@ -88,7 +85,7 @@ describe('RequestQueue', () => {
 
     queue.clear();
     await expect(queued).rejects.toThrow('Queue cleared');
-    await expect(slow).resolves.toBe('slow'); // running tasks are unaffected
+    await expect(slow).resolves.toBe('slow');
   });
 
   it('retries failed tasks up to maxRetries, then rejects', async () => {
@@ -106,7 +103,7 @@ describe('RequestQueue', () => {
     };
 
     await expect(queue.add(flaky, RequestPriority.NORMAL, 2)).rejects.toThrow('transient');
-    expect(attempts).toBe(3); // initial + 2 retries
+    expect(attempts).toBe(3);
   });
 
   it('exposes queue statistics', async () => {

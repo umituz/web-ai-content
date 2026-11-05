@@ -1,10 +1,3 @@
-/**
- * Public API surface lock.
- *
- * Guards against accidental export additions/removals on every published
- * entry point. Any change here is a semver-relevant event: additions are
- * MINOR, removals/renames are MAJOR.
- */
 import { describe, expect, it } from 'vitest';
 
 const sortedExports = async (modulePath: string): Promise<string[]> =>
@@ -13,7 +6,6 @@ const sortedExports = async (modulePath: string): Promise<string[]> =>
 describe('public API surface', () => {
   it('root entry exports exactly the documented surface', async () => {
     expect(await sortedExports('../src/index')).toEqual([
-      // Services
       'ABTestService',
       'AIContentService',
       'AnalysisService',
@@ -30,27 +22,23 @@ describe('public API surface', () => {
       'SeoService',
       'SocialService',
       'VideoScriptService',
-      // Errors
       'AIError',
       'ProviderError',
       'ProviderQuotaExhaustedError',
       'ProviderUnavailableError',
       'ValidationError',
-      // Provider factories
       'createFalProvider',
       'createGeminiProvider',
       'createGroqProvider',
       'createPrunaProvider',
       'createProviderFactory',
       'generateWithPruna',
-      // Wizard flows
       'CONTENT_WIZARD_STEPS',
       'IMAGE_WIZARD_STEPS',
       'VIDEO_WIZARD_STEPS',
       'buildContentRequest',
       'buildImageRequest',
       'buildVideoRequest',
-      // Constants & calculators
       'ASPECT_RATIO_OPTIONS',
       'ASPECT_RATIO_VALUES',
       'GENERATION_COSTS',
@@ -65,7 +53,6 @@ describe('public API surface', () => {
       'calculateCreditCost',
       'getDimensionsForAspectRatio',
       'getRecommendedQuality',
-      // Hooks
       'useAIGeneration',
       'useAIContent',
       'useBlogGenerator',
@@ -79,8 +66,6 @@ describe('public API surface', () => {
   it('domain entry has no dependency on application/infrastructure layers', async () => {
     const domain = await import('../src/domain');
     expect(Object.keys(domain).length).toBeGreaterThan(20);
-    // Provider-agnostic text-model defaults (renamed from a provider-branded
-    // name in 2.2.0 — locked here so it cannot silently disappear again).
     expect(domain).toHaveProperty('TextModelDefaults');
     expect(domain).toHaveProperty('ModelDefaults');
   });

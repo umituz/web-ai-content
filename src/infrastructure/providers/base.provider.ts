@@ -1,7 +1,3 @@
-/**
- * Base AI Provider Interface
- * Defines the contract all AI providers must implement
- */
 
 import type {
   ProviderHealth,
@@ -17,68 +13,30 @@ import { ProviderTimingConfig } from '../../domain/limits/ProviderTimingConfig';
 import { calculateRetryBackoffDelayMs } from '../../domain/calculations/RetryBackoffDelay';
 import { AIError } from '../../domain/errors/AIErrors';
 
-// Re-export commonly used types
 export type { ProviderHealth, ProviderType, GeneratedContent };
 
-/**
- * AI Provider Interface
- * All AI providers must implement this interface
- */
 export interface IAIProvider {
-  /**
-   * Unique provider identifier
-   */
   readonly id: string;
 
-  /**
-   * Human-readable provider name
-   */
   readonly name: string;
 
-  /**
-   * Provider type(s)
-   */
   readonly type: ProviderType;
 
-  /**
-   * Check if provider is healthy and available
-   */
   healthCheck(): Promise<ProviderHealth>;
 
-  /**
-   * Estimate cost for a generation request
-   */
   estimateCost(request: TextGenerationRequest | ImageGenerationRequest | VideoGenerationRequest): Promise<number>;
 
-  /**
-   * Generate text content
-   */
   generateText(request: TextGenerationRequest): Promise<GeneratedContent>;
 
-  /**
-   * Generate image from text prompt
-   */
   generateImage(request: ImageGenerationRequest): Promise<GeneratedContent>;
 
-  /**
-   * Generate video from text prompt
-   */
   generateVideo(request: VideoGenerationRequest): Promise<GeneratedContent>;
 
-  /**
-   * Convert image to video
-   */
   imageToVideo(request: ImageToVideoRequest): Promise<GeneratedContent>;
 
-  /**
-   * Transform video (video-to-video)
-   */
   videoToVideo(request: VideoToVideoRequest): Promise<GeneratedContent>;
 }
 
-/**
- * Abstract base provider with common functionality
- */
 export abstract class BaseAIProvider implements IAIProvider {
   abstract readonly id: string;
   abstract readonly name: string;
@@ -95,13 +53,8 @@ export abstract class BaseAIProvider implements IAIProvider {
     this.config = config;
   }
 
-  /**
-   * Default health check implementation
-   * Override for provider-specific health checks
-   */
   async healthCheck(): Promise<ProviderHealth> {
     try {
-      // Default: check if API key is present
       if (!this.config.apiKey) {
         return 'unavailable';
       }
@@ -111,27 +64,16 @@ export abstract class BaseAIProvider implements IAIProvider {
     }
   }
 
-  /**
-   * Default cost estimation
-   * Override for provider-specific pricing
-   */
   async estimateCost(_request: TextGenerationRequest | ImageGenerationRequest | VideoGenerationRequest): Promise<number> {
-    // Default: return 0 (free)
     return 0;
   }
 
-  /**
-   * Abstract methods - must be implemented by concrete providers
-   */
   abstract generateText(request: TextGenerationRequest): Promise<GeneratedContent>;
   abstract generateImage(request: ImageGenerationRequest): Promise<GeneratedContent>;
   abstract generateVideo(request: VideoGenerationRequest): Promise<GeneratedContent>;
   abstract imageToVideo(request: ImageToVideoRequest): Promise<GeneratedContent>;
   abstract videoToVideo(request: VideoToVideoRequest): Promise<GeneratedContent>;
 
-  /**
-   * Helper method for HTTP requests with timeout
-   */
   protected async fetchWithTimeout(url: string, options: RequestInit, timeout?: number): Promise<Response> {
     const effectiveTimeout = timeout ?? this.config.timeout ?? ProviderTimingConfig.DEFAULT_TIMEOUT_MS;
     const controller = new AbortController();
@@ -150,9 +92,6 @@ export abstract class BaseAIProvider implements IAIProvider {
     }
   }
 
-  /**
-   * Helper method for retries
-   */
   protected async withRetry<T>(
     fn: () => Promise<T>,
     maxAttempts?: number
@@ -175,13 +114,6 @@ export abstract class BaseAIProvider implements IAIProvider {
   }
 }
 
-/**
- * Provider error class
- *
- * Extends AIError so provider failures flow through the package-wide error
- * taxonomy (`code`, `cause`) while keeping `instanceof Error` and the
- * original constructor shape intact for existing consumers.
- */
 export class ProviderError extends AIError {
   constructor(
     message: string,
@@ -193,5 +125,3 @@ export class ProviderError extends AIError {
   }
 }
 
-// ProviderUnavailableError and ProviderQuotaExhaustedError live in
-// domain/errors/AIErrors.ts and are re-exported via the package entry point.

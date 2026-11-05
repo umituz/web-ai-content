@@ -1,8 +1,3 @@
-/**
- * Pruna Generation
- * Thin, typed wrapper over the @umituz/pruna-provider runtime API.
- * The peer module is loaded lazily so the package remains optional.
- */
 
 export interface PrunaRequest {
   model?: string;
@@ -50,11 +45,6 @@ async function loadPrunaCore(): Promise<PrunaCore> {
   return prunaCorePromise;
 }
 
-/**
- * Streaming entry point: yields progress + result chunks.
- * Falls back to submitPrediction/pollForResult when the core module
- * does not export generateWithPruna directly.
- */
 export async function* generateWithPruna(
   request: PrunaRequest,
   apiKey: string,

@@ -1,8 +1,3 @@
-/**
- * Request Queue Configuration
- * Centralized defaults for the request queue, retry policy, and
- * rate limiting. Read once by RequestQueue during construction.
- */
 
 export const RequestQueueConfig = {
   MAX_CONCURRENT: 3,
@@ -16,6 +11,5 @@ export const RequestQueueConfig = {
     MAX_REQUESTS_PER_WINDOW: 100,
   },
 
-  /** Polling interval the queue uses to check the work loop. */
   POLL_INTERVAL_MS: 100,
 } as const;

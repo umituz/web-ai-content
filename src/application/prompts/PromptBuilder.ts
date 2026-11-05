@@ -1,8 +1,3 @@
-/**
- * Prompt Builder
- * Single responsibility: build AI prompts for content generation flows.
- * Pure functions; all numeric magic lives in calculations/limits modules.
- */
 
 import { estimateWordCountForDuration, estimateTokenBudgetForDuration } from '../../domain/calculations/SpeechPaceEstimate';
 
@@ -360,7 +355,6 @@ Return only the JSON:
 `;
   }
 
-  /** Re-exported for backward compatibility. */
   static maxTokensForDuration(durationSeconds: number): number {
     return estimateTokenBudgetForDuration(durationSeconds);
   }

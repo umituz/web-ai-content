@@ -1,8 +1,3 @@
-/**
- * useAIGeneration Hook
- * Orchestrates AI content generation with upload, generate, and save steps.
- * Thin wrapper that delegates the actual pipeline to runGeneration.
- */
 
 import { useCallback, useRef, useState } from 'react';
 import type {

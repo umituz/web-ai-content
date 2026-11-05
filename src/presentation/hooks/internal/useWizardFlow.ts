@@ -1,9 +1,3 @@
-/**
- * useWizardFlow
- * Generic stateful wizard hook. Replaces 3 near-identical wizard hook implementations
- * (useContentWizard, useImageWizard, useVideoWizard) with a single factory function
- * parameterized by step list and data type.
- */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -126,7 +120,6 @@ export function useWizardFlow<T extends string, D extends object>(
     setIsProcessing(false);
   }, []);
 
-  // Auto-complete side effect (only when reaching the final step)
   useEffect(() => {
     if (currentIndex === steps.length - 1 && steps.length > 0) {
       optionsRef.current.onComplete?.(wizardData);

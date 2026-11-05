@@ -1,14 +1,3 @@
-/**
- * AI Content Service (Facade)
- *
- * Thin orchestrator that delegates to focused feature services:
- * - BlogService, SocialService, VideoScriptService, AnalysisService,
- *   SeoService, ABTestService, ImagePromptService, ContentCalendarService,
- *   MediaGenerationService.
- *
- * The facade keeps the public IAIContentService contract intact for existing
- * consumers while the underlying work is split along single-responsibility lines.
- */
 
 import type LlmClient from '@anthropic-ai/sdk';
 import type { IAIContentService } from '../../domain/interfaces/IAIContentService';
@@ -71,14 +60,6 @@ interface LlmTextGeneratorOptions {
   model?: string;
 }
 
-/**
- * LLM text generator — the default ITextGenerator strategy for the legacy
- * string-configuration mode (`new AIContentService(apiKey)`).
- *
- * The backing SDK is an *optional* peer dependency and is loaded lazily on
- * first generation, so consumers that use provider-config mode (or inject
- * their own ITextGenerator) never pay for — or even install — that SDK.
- */
 class LlmTextGenerator implements ITextGenerator {
   private client: LlmClient | null = null;
 
@@ -143,12 +124,8 @@ const buildServices = (
   textGenerator?: ITextGenerator,
 ): ServiceBundle => {
   if (typeof configOrApiKey === 'string') {
-    // Text-only mode: an injected generator wins; otherwise the default
-    // LLM-backed generator is created lazily from the API key.
     const generator = textGenerator ?? new LlmTextGenerator(configOrApiKey, model);
     const executor = new GenerationExecutor(generator);
-    // Text-only mode: factory has no providers, media-generation methods
-    // will surface a clear error explaining ProviderConfig is required.
     const emptyFactory = new ProviderFactory({
       priority: [],
       fallbackEnabled: false,
@@ -210,14 +187,6 @@ export class AIContentService implements IAIContentService {
   private readonly contentCalendarService: ContentCalendarService;
   private readonly mediaGenerationService: MediaGenerationService;
 
-  /**
-   * @param configOrApiKey Provider configuration (multi-provider mode) or a
-   *        bare API key (legacy text-only mode).
-   * @param model Default text model for the legacy string mode.
-   * @param textGenerator Optional custom text backend for the legacy string
-   *        mode. Injecting one decouples the service from the default
-   *        LLM-backed generator entirely.
-   */
   constructor(
     configOrApiKey: ProviderConfig | string,
     model: string = TextModelDefaults.TEXT_MODEL,
@@ -236,12 +205,10 @@ export class AIContentService implements IAIContentService {
     this.mediaGenerationService = bundle.mediaGenerationService;
   }
 
-  // ---------- Blog ----------
   generateBlogPost(request: BlogGenerationRequest): Promise<GeneratedBlog> {
     return this.blogService.generateBlogPost(request);
   }
 
-  // ---------- Social ----------
   generateSocialContent(request: SocialContentRequest): Promise<GeneratedSocialContent> {
     return this.socialService.generateSocialContent(request);
   }
@@ -255,7 +222,6 @@ export class AIContentService implements IAIContentService {
     return Promise.resolve(this.socialService.optimizeHashtags(hashtags, platform));
   }
 
-  // ---------- Video Script ----------
   generateVideoScript(request: VideoScriptRequest): Promise<GeneratedVideoScript> {
     return this.videoScriptService.generateVideoScript(request);
   }
@@ -263,12 +229,10 @@ export class AIContentService implements IAIContentService {
     return this.videoScriptService.generateVoiceScript(topic, emotion, duration);
   }
 
-  // ---------- Content Calendar ----------
   generateContentCalendar(niche: string, days: number): Promise<ContentCalendarEntry[]> {
     return this.contentCalendarService.generateContentCalendar(niche, days);
   }
 
-  // ---------- Analysis ----------
   analyzeSentiment(content: string): Promise<SentimentAnalysisResult> {
     return this.analysisService.analyzeSentiment(content);
   }
@@ -276,7 +240,6 @@ export class AIContentService implements IAIContentService {
     return this.analysisService.analyzeContent(request);
   }
 
-  // ---------- SEO ----------
   optimizeSEO(request: SEOOptimizationRequest): Promise<SEOOptimizationResult> {
     return this.seoService.optimizeSEO(request);
   }
@@ -287,7 +250,6 @@ export class AIContentService implements IAIContentService {
     return Promise.resolve(this.seoService.analyzeKeywords(content, keywords));
   }
 
-  // ---------- A/B Testing ----------
   predictABTest(request: ABTestRequest): Promise<ABTestPrediction[]> {
     return this.abTestService.predictABTest(request);
   }
@@ -295,7 +257,6 @@ export class AIContentService implements IAIContentService {
     return this.abTestService.compareVariants(variantA, variantB);
   }
 
-  // ---------- Image Prompts ----------
   generateImagePrompt(description: string, style: string): Promise<string> {
     return this.imagePromptService.generateImagePrompt(description, style);
   }
@@ -303,7 +264,6 @@ export class AIContentService implements IAIContentService {
     return this.imagePromptService.generateImagePromptsForBlog(blogContent);
   }
 
-  // ---------- Provider-backed media ----------
   generateImage(request: ImageGenerationRequest): Promise<GeneratedContent> {
     return this.mediaGenerationService.generateImage(request);
   }
@@ -318,5 +278,4 @@ export class AIContentService implements IAIContentService {
   }
 }
 
-// Re-export IAIProvider for backwards compatibility (now lives in infrastructure)
 export type { IAIProvider } from '../../infrastructure/providers/base.provider';

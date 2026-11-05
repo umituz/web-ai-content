@@ -1,8 +1,3 @@
-/**
- * Provider Cost Estimator
- * Pure per-provider cost estimates used by the legacy
- * `estimateCost` calls. Real pricing should be sourced from billing.
- */
 
 import type { ImageGenerationRequest, TextGenerationRequest, VideoGenerationRequest } from '../config/ProviderConfig';
 

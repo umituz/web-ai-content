@@ -1,7 +1,3 @@
-/**
- * A/B Test Service
- * Single responsibility: AI-powered A/B test prediction and comparison.
- */
 
 import { PromptBuilder } from '../prompts/PromptBuilder';
 import { GenerationExecutor } from './GenerationExecutor';

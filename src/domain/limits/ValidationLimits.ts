@@ -1,9 +1,3 @@
-/**
- * Validation Limits
- * Single source of truth for every user-input bound.
- * Centralizing these keeps the validation layer honest: any new bound is
- * added here and consumed by the matching validator.
- */
 
 export const ValidationLimits = {
   TOPIC: {

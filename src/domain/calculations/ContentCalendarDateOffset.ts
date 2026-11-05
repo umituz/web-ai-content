@@ -1,8 +1,3 @@
-/**
- * Content Calendar Date Offset
- * Pure math that converts a "day index" (1-based) into a concrete Date
- * offset from "now" in milliseconds.
- */
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 

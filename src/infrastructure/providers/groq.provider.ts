@@ -1,7 +1,3 @@
-/**
- * Groq AI Provider
- * Fast LPU inference for text generation using @umituz/web-ai-groq-provider
- */
 
 import { BaseAIProvider, type GeneratedContent } from './base.provider';
 import { ProviderTimingConfig } from '../../domain/limits/ProviderTimingConfig';
@@ -9,9 +5,6 @@ import { ModelDefaults } from '../../domain/limits/ModelDefaults';
 import { estimateGroqGenerationCost } from '../../domain/predicates/ProviderCostEstimator';
 import type { GroqConfig, TextGenerationRequest, ImageGenerationRequest, VideoGenerationRequest, ImageToVideoRequest, VideoToVideoRequest } from '../../domain/config/ProviderConfig';
 
-// Typed against the real published module — `typeof import(...)` keeps the
-// contract honest (no hand-written mirror of the peer's API) while the
-// runtime import below stays lazy, keeping the peer optional.
 type GroqProviderModule = typeof import('@umituz/web-ai-groq-provider');
 type GroqContainer = NonNullable<ReturnType<GroqProviderModule['getProvider']>>;
 type GroqTextService = GroqContainer['textGeneration'];
@@ -23,9 +16,6 @@ let groqHttpClient: GroqHttpClient | null = null;
 async function initializeGroqServices(config: GroqConfig): Promise<void> {
   if (textGenerationService && groqHttpClient) return;
   try {
-    // The peer exposes a configured container (singletons pre-2.x). Reuse the
-    // active one or configure it with our credentials; text generation
-    // routes through the container's services.
     const mod = await import('@umituz/web-ai-groq-provider');
     const container: GroqContainer =
       mod.getProvider() ??
@@ -50,10 +40,6 @@ function requireTextService(): GroqTextService {
   return textGenerationService;
 }
 
-/**
- * Groq Provider Implementation
- * Delegates to @umituz/web-ai-groq-provider for actual API calls
- */
 export class GroqProvider extends BaseAIProvider {
   readonly id = 'groq';
   readonly name = 'Groq';
@@ -75,9 +61,6 @@ export class GroqProvider extends BaseAIProvider {
     this.groqConfig = config;
   }
 
-  /**
-   * Health check for Groq
-   */
   async healthCheck(): Promise<'healthy' | 'degraded' | 'exhausted' | 'unavailable'> {
     try {
       if (!this.config.apiKey) {
@@ -86,7 +69,6 @@ export class GroqProvider extends BaseAIProvider {
 
       await initializeGroqServices(this.groqConfig!);
 
-      // Simple health check - try to list models
       const response = await this.fetchWithTimeout(
         `${this.config.baseUrl}/models`,
         {
@@ -104,16 +86,10 @@ export class GroqProvider extends BaseAIProvider {
     }
   }
 
-  /**
-   * Estimate cost for Groq (they offer free tier)
-   */
   async estimateCost(_request?: TextGenerationRequest | ImageGenerationRequest | VideoGenerationRequest): Promise<number> {
     return estimateGroqGenerationCost(_request);
   }
 
-  /**
-   * Generate text using Groq API via @umituz/web-ai-groq-provider
-   */
   async generateText(request: TextGenerationRequest): Promise<GeneratedContent> {
     try {
       await initializeGroqServices(this.groqConfig!);
@@ -143,9 +119,6 @@ export class GroqProvider extends BaseAIProvider {
     }
   }
 
-  /**
-   * Generate structured JSON output using Groq
-   */
   async generateStructuredJSON<T = Record<string, unknown>>(
     request: TextGenerationRequest & { schema?: Record<string, unknown> }
   ): Promise<T> {
@@ -155,7 +128,7 @@ export class GroqProvider extends BaseAIProvider {
       return await requireTextService().generateStructured<T>(request.prompt, {
         model: request.model || this.defaultModel,
         generationConfig: {
-          temperature: 0.1, // Lower temperature for JSON
+          temperature: 0.1,
           maxTokens: request.maxTokens || 2048,
           reasoningEffort: this.reasoningEffort,
         },
@@ -166,9 +139,6 @@ export class GroqProvider extends BaseAIProvider {
     }
   }
 
-  /**
-   * Stream text generation using Groq
-   */
   async streamText(
     request: TextGenerationRequest,
     onChunk: (chunk: string) => void,
@@ -195,38 +165,23 @@ export class GroqProvider extends BaseAIProvider {
     }
   }
 
-  /**
-   * Groq doesn't support image generation
-   */
   async generateImage(_request: ImageGenerationRequest): Promise<GeneratedContent> {
     throw new Error('Groq provider does not support image generation. Use Pruna provider for image generation.');
   }
 
-  /**
-   * Groq doesn't support video generation
-   */
   async generateVideo(_request: VideoGenerationRequest): Promise<GeneratedContent> {
     throw new Error('Groq provider does not support video generation. Use Pruna provider for video generation.');
   }
 
-  /**
-   * Groq doesn't support image-to-video
-   */
   async imageToVideo(_request: ImageToVideoRequest): Promise<GeneratedContent> {
     throw new Error('Groq provider does not support image-to-video conversion. Use Pruna provider for image-to-video.');
   }
 
-  /**
-   * Groq doesn't support video-to-video
-   */
   async videoToVideo(_request: VideoToVideoRequest): Promise<GeneratedContent> {
     throw new Error('Groq provider does not support video-to-video conversion. Use Pruna provider for video-to-video.');
   }
 }
 
-/**
- * Create a Groq provider
- */
 export function createGroqProvider(config: GroqConfig): GroqProvider {
   return new GroqProvider(config);
 }

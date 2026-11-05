@@ -1,8 +1,3 @@
-/**
- * Model Defaults
- * Default LLM model identifiers for each provider and content type.
- * Centralized so consumers never hardcode model strings.
- */
 
 export const ModelDefaults = {
   GROQ_TEXT: 'llama-3.1-8b-instant',
@@ -17,11 +12,6 @@ export const ModelDefaults = {
   PRUNA_VIDEO: 'p-video',
 } as const;
 
-/**
- * Defaults for the text-model path (single-SDK string configuration).
- * Provider-agnostic: these are sampling/budget defaults for whichever
- * text backend the service is wired to.
- */
 export const TextModelDefaults = {
   TEXT_MODEL: 'claude-sonnet-4-20250514',
   MAX_TOKENS: 4_096,

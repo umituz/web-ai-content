@@ -1,9 +1,3 @@
-/**
- * AI Error Types
- * Centralized error taxonomy for AI content generation. Each error carries
- * a stable `code` so consumers (UI, monitoring) can branch on category
- * without parsing free-form messages.
- */
 
 export type AIErrorCode =
   | 'VALIDATION_ERROR'

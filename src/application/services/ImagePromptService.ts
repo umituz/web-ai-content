@@ -1,7 +1,3 @@
-/**
- * Image Prompt Service
- * Single responsibility: AI-powered image prompt generation.
- */
 
 import { PromptBuilder } from '../prompts/PromptBuilder';
 import { GenerationExecutor } from './GenerationExecutor';

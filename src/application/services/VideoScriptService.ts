@@ -1,7 +1,3 @@
-/**
- * Video Script Service
- * Single responsibility: AI-powered video script generation.
- */
 
 import { PromptBuilder } from '../prompts/PromptBuilder';
 import { GenerationExecutor } from './GenerationExecutor';

@@ -1,7 +1,3 @@
-/**
- * Duration Seconds Validator
- * Range-checks a video / voice script duration (in seconds).
- */
 
 import { ValidationLimits } from '../limits/ValidationLimits';
 import { ValidationError } from '../errors/AIErrors';

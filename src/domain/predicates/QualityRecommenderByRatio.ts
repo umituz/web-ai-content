@@ -1,8 +1,3 @@
-/**
- * Quality Recommender by Aspect Ratio
- * Pure decision function: chooses an image/video quality tier based on
- * the aspect ratio. Wide ratios suggest HD; others default to standard.
- */
 
 import type { AspectRatio, ImageQuality, VideoQuality } from '../limits/ImageFormatOptions';
 

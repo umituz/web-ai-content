@@ -1,9 +1,3 @@
-/**
- * useAIContentContext
- * Centralizes shared state (loading, progress, error) and stable
- * service instance creation for the useAIContent family of hooks.
- * Eliminates 17+ duplicated try/catch blocks across callbacks.
- */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AIContentService } from '../../../application/services/AIContentService';
@@ -57,10 +51,7 @@ export function useAIContentContext(options: UseAIContentContextOptions): UseAIC
     callbacksRef.current = callbacks;
   }, [callbacks]);
 
-  // Tracks in-flight operations so overlapping calls cannot clear the
-  // loading state while another run is still active.
   const activeRunsRef = useRef(0);
-  // Suppresses state updates after the component unmounts.
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -70,7 +61,6 @@ export function useAIContentContext(options: UseAIContentContextOptions): UseAIC
     };
   }, []);
 
-  // Stable service creation by reference identity of providers/apiKey
   const service = useMemo(() => {
     if (providers) {
       return new AIContentService(providers);
@@ -136,8 +126,6 @@ export function useAIContentContext(options: UseAIContentContextOptions): UseAIC
     [reportError, reportProgress],
   );
 
-  // Memoized so downstream useCallback/useMemo dependencies stay stable —
-  // a fresh object each render would invalidate every consumer's memo.
   const ctx: AsyncContext = useMemo(() => ({
     isLoading,
     progress,

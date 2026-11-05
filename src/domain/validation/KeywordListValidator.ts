@@ -1,7 +1,3 @@
-/**
- * Keyword List Validator
- * Trims, dedupes blanks, and length-checks a list of SEO keywords.
- */
 
 import { ValidationLimits } from '../limits/ValidationLimits';
 import { ValidationError } from '../errors/AIErrors';

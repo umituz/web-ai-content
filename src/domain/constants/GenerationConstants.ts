@@ -1,8 +1,3 @@
-/**
- * AI Generation Constants
- * Backward-compatible re-exports of the canonical format options.
- * Single source of truth lives in domain/limits/ImageFormatOptions.
- */
 
 import {
   ASPECT_RATIO_OPTIONS,
@@ -21,13 +16,10 @@ export const ASPECT_RATIO_VALUES = ASPECT_RATIO_OPTIONS.map((o) => o.value);
 export const IMAGE_QUALITY_VALUES = IMAGE_QUALITY_OPTIONS.map((o) => o.value);
 export const VIDEO_QUALITY_VALUES = VIDEO_QUALITY_OPTIONS.map((o) => o.value);
 
-/** Public re-export kept for backwards compatibility. */
 export const VIDEO_DURATION_OPTIONS = VIDEO_DURATION_OPTIONS_SECONDS;
 
 export { MOTION_OPTIONS, STYLE_PRESETS };
 
-/** Public re-export: see domain/calculations/AspectRatioDimensions. */
 export const getDimensionsForAspectRatio = resolveDimensionsForAspectRatio;
 
-/** Public re-export: see domain/predicates/QualityRecommenderByRatio. */
 export const getRecommendedQuality = recommendQualityForAspectRatio;

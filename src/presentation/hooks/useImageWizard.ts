@@ -1,8 +1,3 @@
-/**
- * useImageWizard
- * Hook for the AI image generation wizard.
- * Wraps the generic useWizardFlow factory with image-specific steps and helpers.
- */
 
 import { useCallback, useMemo } from 'react';
 import type { ImageWizardStep, ImageWizardData } from '../../application/flows/image.wizard';

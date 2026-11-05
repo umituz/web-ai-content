@@ -1,8 +1,3 @@
-/**
- * Score Range Guard
- * Pure range-clamping with explicit fallbacks for invalid input.
- * Centralized here so the score semantics (0..100) live in one place.
- */
 
 const SCORE_MIN = 0;
 const SCORE_MAX = 100;

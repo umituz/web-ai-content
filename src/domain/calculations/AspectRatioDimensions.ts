@@ -1,8 +1,3 @@
-/**
- * Aspect Ratio Dimensions
- * Pure math that translates an aspect-ratio label into a pixel pair
- * (width, height) suitable for image generation requests.
- */
 
 import { ASPECT_RATIO_OPTIONS, type AspectRatio } from '../limits/ImageFormatOptions';
 

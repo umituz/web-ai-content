@@ -1,7 +1,3 @@
-/**
- * Calendar Days Validator
- * Range-checks the number of days requested for a content calendar.
- */
 
 import { ValidationLimits } from '../limits/ValidationLimits';
 import { ValidationError } from '../errors/AIErrors';

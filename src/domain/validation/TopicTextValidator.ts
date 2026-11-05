@@ -1,7 +1,3 @@
-/**
- * Topic Text Validator
- * Trims and length-checks a user-provided topic string.
- */
 
 import { ValidationLimits } from '../limits/ValidationLimits';
 import { ValidationError } from '../errors/AIErrors';

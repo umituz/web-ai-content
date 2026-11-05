@@ -1,9 +1,3 @@
-/**
- * Media Generation Services
- * Provider-backed services for image and video generation.
- * Delegate to the multi-provider factory and translate errors into
- * user-meaningful messages.
- */
 
 import type {
   ImageGenerationRequest,
@@ -17,8 +11,6 @@ import { AIError } from '../../domain/errors/AIErrors';
 
 const wrapProviderError = (operation: string, error: unknown): AIError => {
   const message = error instanceof Error ? error.message : 'Unknown error';
-  // Preserve the underlying error (and its code, when it is already an
-  // AIError) as `cause` instead of flattening it into a plain message.
   return new AIError(`${operation} failed: ${message}`, 'PROVIDER_ERROR', error);
 };
 

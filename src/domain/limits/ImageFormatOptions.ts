@@ -1,9 +1,3 @@
-/**
- * Image Format Options
- * Centralized options for aspect ratios, image quality, video quality,
- * motion strength, and style presets. All UI controls and API requests
- * read from this single source of truth.
- */
 
 export type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
 export type ImageQuality = 'standard' | 'hd' | '4k';

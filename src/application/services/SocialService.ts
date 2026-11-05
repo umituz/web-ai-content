@@ -1,7 +1,3 @@
-/**
- * Social Service
- * Single responsibility: AI-powered social content generation and orchestration.
- */
 
 import { PromptBuilder } from '../prompts/PromptBuilder';
 import { GenerationExecutor } from './GenerationExecutor';

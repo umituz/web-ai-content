@@ -1,8 +1,3 @@
-/**
- * Keyword Prominence Classifier
- * Pure decision function: maps a numeric density (0..100) to a coarse
- * prominence label. Thresholds come from the SEO team's analysis.
- */
 
 export type KeywordProminence = 'high' | 'medium' | 'low';
 

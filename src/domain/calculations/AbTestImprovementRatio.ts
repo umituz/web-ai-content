@@ -1,8 +1,3 @@
-/**
- * A/B Test Improvement Ratio
- * Pure math for computing the percentage improvement between two
- * predicted engagement scores.
- */
 
 export function calculateImprovementPercentage(scoreA: number, scoreB: number): string {
   const higher = Math.max(scoreA, scoreB);

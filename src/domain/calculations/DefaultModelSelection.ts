@@ -1,8 +1,3 @@
-/**
- * Default Model Selection
- * Pure mapping from generation type / content kind to the default
- * model identifier for a given provider.
- */
 
 import type { GenerationType } from '../types/GenerationTypes';
 import { ModelDefaults } from '../limits/ModelDefaults';

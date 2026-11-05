@@ -1,21 +1,8 @@
-/**
- * Provider Configuration Types
- * Defines configuration for all AI providers
- */
 
-/**
- * Provider health status
- */
 export type ProviderHealth = 'healthy' | 'degraded' | 'exhausted' | 'unavailable';
 
-/**
- * Provider type categories
- */
 export type ProviderType = 'text' | 'image' | 'video' | 'multimodal';
 
-/**
- * Base provider configuration
- */
 export interface BaseProviderConfig {
   enabled: boolean;
   apiKey: string;
@@ -24,9 +11,6 @@ export interface BaseProviderConfig {
   retryAttempts?: number;
 }
 
-/**
- * Groq provider configuration
- */
 export interface GroqConfig extends BaseProviderConfig {
   models?: {
     text?: string;
@@ -35,9 +19,6 @@ export interface GroqConfig extends BaseProviderConfig {
   reasoningEffort?: 'low' | 'medium' | 'high';
 }
 
-/**
- * FAL provider configuration
- */
 export interface FalConfig extends BaseProviderConfig {
   models?: {
     image?: string;
@@ -46,9 +27,6 @@ export interface FalConfig extends BaseProviderConfig {
   };
 }
 
-/**
- * Pruna provider configuration
- */
 export interface PrunaConfig extends BaseProviderConfig {
   models?: {
     textToImage?: string;
@@ -56,9 +34,6 @@ export interface PrunaConfig extends BaseProviderConfig {
   };
 }
 
-/**
- * Gemini provider configuration
- */
 export interface GeminiConfig extends BaseProviderConfig {
   models?: {
     text?: string;
@@ -67,36 +42,24 @@ export interface GeminiConfig extends BaseProviderConfig {
   };
 }
 
-/**
- * Main provider configuration
- */
 export interface ProviderConfig {
-  // Priority order for providers (first = highest priority)
   priority: string[];
 
-  // Individual provider configs
   groq?: GroqConfig;
   fal?: FalConfig;
   pruna?: PrunaConfig;
   gemini?: GeminiConfig;
 
-  // Global settings
   fallbackEnabled: boolean;
   retryAttempts: number;
   timeout: number;
 }
 
-/**
- * Generation request base interface
- */
 export interface GenerationRequest {
   type: 'text' | 'image' | 'video';
-  provider?: string; // Override provider selection
+  provider?: string;
 }
 
-/**
- * Text generation request
- */
 export interface TextGenerationRequest extends GenerationRequest {
   type: 'text';
   prompt: string;
@@ -106,9 +69,6 @@ export interface TextGenerationRequest extends GenerationRequest {
   topP?: number;
 }
 
-/**
- * Image generation request
- */
 export interface ImageGenerationRequest extends GenerationRequest {
   type: 'image';
   prompt: string;
@@ -118,9 +78,6 @@ export interface ImageGenerationRequest extends GenerationRequest {
   quantity?: number;
 }
 
-/**
- * Video generation request
- */
 export interface VideoGenerationRequest extends GenerationRequest {
   type: 'video';
   prompt: string;
@@ -130,9 +87,6 @@ export interface VideoGenerationRequest extends GenerationRequest {
   quality?: 'standard' | 'high' | 'ultra';
 }
 
-/**
- * Image to video request
- */
 export interface ImageToVideoRequest extends GenerationRequest {
   type: 'video';
   imageUrl: string;
@@ -142,9 +96,6 @@ export interface ImageToVideoRequest extends GenerationRequest {
   camera?: 'static' | 'pan' | 'zoom' | 'tracking';
 }
 
-/**
- * Video to video request
- */
 export interface VideoToVideoRequest extends GenerationRequest {
   type: 'video';
   sourceVideoUrl: string;
@@ -153,9 +104,6 @@ export interface VideoToVideoRequest extends GenerationRequest {
   enhanceQuality?: boolean;
 }
 
-/**
- * Generated content result
- */
 export interface GeneratedContent {
   id: string;
   type: 'text' | 'image' | 'video';

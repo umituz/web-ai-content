@@ -1,8 +1,3 @@
-/**
- * useBlogGenerator
- * Specialized hook for blog post generation.
- * Delegates to the AIContentService through the shared useAIContentContext.
- */
 
 import { useCallback, useState } from 'react';
 import type { BlogGenerationRequest, GeneratedBlog } from '../../domain/entities/ContentGeneration';

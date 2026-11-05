@@ -1,8 +1,3 @@
-/**
- * Retry Backoff Delay
- * Pure math for exponential backoff scheduling. Each retry attempt N
- * (0-indexed) waits `base * 2^N` milliseconds.
- */
 
 import { ProviderTimingConfig } from '../limits/ProviderTimingConfig';
 

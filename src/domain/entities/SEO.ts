@@ -1,6 +1,3 @@
-/**
- * SEO Optimization Request
- */
 export interface SEOOptimizationRequest {
   content: string;
   keywords: string[];
@@ -9,12 +6,9 @@ export interface SEOOptimizationRequest {
   language?: string;
 }
 
-/**
- * SEO Optimization Result
- */
 export interface SEOOptimizationResult {
   optimized: string;
-  score: number; // 0-100
+  score: number;
   suggestions: string[];
   addedKeywords: string[];
   removedFillerWords: number;
@@ -24,9 +18,6 @@ export interface SEOOptimizationResult {
   schemaMarkup?: string;
 }
 
-/**
- * SEO Score Breakdown
- */
 export interface SEOScoreBreakdown {
   keywordDensity: number;
   readabilityScore: number;
@@ -37,9 +28,6 @@ export interface SEOScoreBreakdown {
   overall: number;
 }
 
-/**
- * Keyword Analysis
- */
 export interface KeywordAnalysis {
   keyword: string;
   count: number;

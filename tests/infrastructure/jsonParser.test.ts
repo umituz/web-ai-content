@@ -8,8 +8,6 @@ import {
 
 describe('extractJSON', () => {
   it('extracts a fenced JSON block even when surrounding prose contains braces', () => {
-    // Regression: the greedy brace regex used to win over the fence,
-    // producing '{ is some "json" } {"a":1}' and failing to parse.
     const noisy = 'Sure! Here { is some "json" }\n```json\n{"a":1}\n```\nEnjoy!';
     expect(extractJSON(noisy)).toBe('{"a":1}');
   });

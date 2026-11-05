@@ -1,7 +1,3 @@
-/**
- * Hashtag Count Validator
- * Range-checks the number of hashtags a caller asked for.
- */
 
 import { ValidationLimits } from '../limits/ValidationLimits';
 import { ValidationError } from '../errors/AIErrors';

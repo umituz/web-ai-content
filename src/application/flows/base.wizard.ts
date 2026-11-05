@@ -1,6 +1,3 @@
-/**
- * Wizard Step Definition
- */
 export interface WizardStep<T extends string = string> {
   id: T;
   label: string;
@@ -10,22 +7,13 @@ export interface WizardStep<T extends string = string> {
   validate?: (data: Record<string, unknown>) => boolean | { valid: boolean; errors: Record<string, string> };
 }
 
-/**
- * Validation Result
- */
 export interface ValidationResult {
   valid: boolean;
   errors: Record<string, string>;
 }
 
-/**
- * Wizard data storage
- */
 export type WizardData = Record<string, unknown>;
 
-/**
- * Wizard configuration
- */
 export interface WizardConfig<T extends string = string> {
   steps: WizardStep<T>[];
   initialStep?: T;

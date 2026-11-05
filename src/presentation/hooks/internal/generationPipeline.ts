@@ -1,8 +1,3 @@
-/**
- * Generation Pipeline
- * Shared orchestration logic for image/video generation in useAIGeneration.
- * Eliminates the previous near-identical 100-line blocks for generateImage and generateVideo.
- */
 
 import type {
   GenerationResult,
@@ -88,10 +83,6 @@ function buildResult(
   };
 }
 
-/**
- * Run a single image/video generation: credits check, optional upload,
- * streaming request, and result persistence.
- */
 export async function runGeneration(
   input: GenerationInput,
   hooks: PipelineHooks,
@@ -124,8 +115,6 @@ export async function runGeneration(
       options.apiKey,
       options.signal,
       (stage) => {
-        // 'predicting' is a pruna-specific stage; map it onto the public
-        // 'processing' stage so GenerationProgress stays provider-neutral.
         const publicStage = stage === 'predicting' ? 'processing' : stage;
         const progressEvent: GenerationProgress = { stage: publicStage, progress: 50, message: `Generating... (${stage})` };
         hooks.setProgress(progressEvent);
@@ -151,9 +140,6 @@ export async function runGeneration(
     deps.onSuccess?.(result);
     return result;
   } catch (err) {
-    // A cancelled run is not a failure: surface it as 'cancelled' without
-    // clobbering state (an aborted request rejects with an AbortError that
-    // would otherwise be reported as a generation failure).
     if (options.signal.aborted) {
       hooks.setStatus('cancelled');
       hooks.setProgress(null);

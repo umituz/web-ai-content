@@ -1,7 +1,3 @@
-/**
- * SEO Service
- * Single responsibility: AI-powered SEO optimization and analysis.
- */
 
 import { PromptBuilder } from '../prompts/PromptBuilder';
 import { GenerationExecutor } from './GenerationExecutor';
@@ -85,13 +81,9 @@ export class SeoService {
     };
   }
 
-  /**
-   * Deterministic keyword analysis (no AI call required).
-   */
   analyzeKeywords(content: string, keywords: string[]): KeywordAnalysis[] {
     const validatedContent = validateContentBody(content);
     const validatedKeywords = validateKeywordList(keywords);
-    // Ensure total-words is computed for the density helper even when unused.
     void countWordsInContent(validatedContent);
 
     return validatedKeywords.map((keyword) => {

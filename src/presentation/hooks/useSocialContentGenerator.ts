@@ -1,8 +1,3 @@
-/**
- * useSocialContentGenerator
- * Specialized hook for social content generation.
- * Delegates to the AIContentService through the shared useAIContentContext.
- */
 
 import { useCallback, useState } from 'react';
 import type { SocialContentRequest, GeneratedSocialContent } from '../../domain/entities/ContentGeneration';

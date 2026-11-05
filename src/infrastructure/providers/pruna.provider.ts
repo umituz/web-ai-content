@@ -1,9 +1,3 @@
-/**
- * Pruna AI Provider
- * Image and video generation using Pruna AI
- *
- * Real implementation using @umituz/pruna-provider client
- */
 
 import type { PrunaConfig } from '../../domain/config/ProviderConfig';
 import type { GeneratedContent } from './base.provider';
@@ -16,11 +10,6 @@ import type {
 } from '../../domain/config/ProviderConfig';
 export { generateWithPruna } from './pruna-generate';
 
-/**
- * Legacy PrunaProvider stub for backward compatibility with AIContentService
- *
- * @deprecated Use generateWithPruna function instead
- */
 export class PrunaProvider {
   readonly id = 'pruna';
   readonly name = 'Pruna AI';
@@ -57,11 +46,6 @@ export class PrunaProvider {
   }
 }
 
-/**
- * Create a Pruna provider factory function
- *
- * @deprecated Use generateWithPruna function instead
- */
 export function createPrunaProvider(config: PrunaConfig) {
   return new PrunaProvider(config);
 }

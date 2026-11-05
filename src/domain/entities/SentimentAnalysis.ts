@@ -1,25 +1,16 @@
 import { Sentiment, Emotion } from '../types';
 
-/**
- * Sentiment Analysis Result
- */
 export interface SentimentAnalysisResult {
   sentiment: Sentiment;
-  confidence: number; // 0-1
+  confidence: number;
   emotions: EmotionScore[];
 }
 
-/**
- * Emotion Score
- */
 export interface EmotionScore {
   emotion: Emotion;
-  score: number; // 0-1
+  score: number;
 }
 
-/**
- * Content Analysis Request
- */
 export interface ContentAnalysisRequest {
   content: string;
   detectEmotions?: boolean;
@@ -27,9 +18,6 @@ export interface ContentAnalysisRequest {
   detectEntities?: boolean;
 }
 
-/**
- * Content Analysis Result
- */
 export interface ContentAnalysisResult {
   sentiment: SentimentAnalysisResult;
   keywords: string[];

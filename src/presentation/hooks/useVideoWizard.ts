@@ -1,8 +1,3 @@
-/**
- * useVideoWizard
- * Hook for the AI video generation wizard.
- * Wraps the generic useWizardFlow factory with video-specific steps and helpers.
- */
 
 import { useCallback, useMemo } from 'react';
 import type { VideoWizardStep, VideoWizardData } from '../../application/flows/video.wizard';
